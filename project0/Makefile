@@ -14,9 +14,10 @@ mips:
 	ocamllex lex.mll
 	$(COMPILER) -c lex.ml
 	$(COMPILER) -c byte.ml
+	$(COMPILER) -c mach.ml
 	$(COMPILER) -c mips_sim.ml
 	$(COMPILER) -c mips.ml
-	$(COMPILER) -o ps0 mips_ast.cmo parse.cmo lex.cmo byte.cmo 	mips_sim.cmo mips.cmo
+	$(COMPILER) -o ps0 mips_ast.cmo parse.cmo lex.cmo byte.cmo mach.cmo mips_sim.cmo mips.cmo
 
 clean:
 	-rm *.cmo *.cmi ps0 parse.ml parse.mli lex.ml 
