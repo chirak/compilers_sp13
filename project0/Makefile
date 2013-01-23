@@ -6,6 +6,8 @@ COMPILER=ocamlc
  
 all: clean mips
 
+test: clean buildtest
+
 mips:
 	$(COMPILER) -c mips_ast.ml
 	ocamlyacc parse.mly
@@ -19,5 +21,7 @@ mips:
 	$(COMPILER) -c mips.ml
 	$(COMPILER) -o ps0 mips_ast.cmo parse.cmo lex.cmo byte.cmo mach.cmo mips_sim.cmo mips.cmo
 
+buildtest:
+	ocamlfind $(COMPILER) -o test -package oUnit -linkpkg -g mips_ast.ml byte.ml mach.ml mips_sim.ml mach_test.ml
 clean:
-	-rm *.cmo *.cmi ps0 parse.ml parse.mli lex.ml 
+	-rm *.cmo *.cmi test ps0 parse.ml parse.mli lex.ml 

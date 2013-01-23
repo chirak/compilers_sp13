@@ -34,7 +34,8 @@ let parse_stdin() =
  * usage: ps0 [file-to-interpret] *)
 let _ =
   let prog = parse_file() in
-  let state' = interp (assem prog) in
+  (* let state' = interp (assem prog) in *)
+  let state' = assem prog in
   let _ = print_string ("Register File\n"^(string_of_rf state'.r)) in
   let _ = print_string ("Memory\n"^(string_of_mem state'.m)) in
   print_string ("PC = "^(Int32.to_string state'.pc)^"\n")

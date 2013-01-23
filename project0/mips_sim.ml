@@ -4,7 +4,8 @@ open Byte
 exception TODO
 exception FatalError
 
-let word = Int32.of_int 4
+let one_byte   = Int32.one
+let four_bytes = Int32.of_int 4
 
 (* Register file definitions. A register file is a map from a register 
    number to a 32-bit quantity. *)
@@ -38,17 +39,32 @@ type state = { r : regfile; pc : int32; m : memory }
    state. You can start the PC at any address you wish. Just make sure that 
    you put the generated machine code where you started the PC in memory! *)
 let rec assem (prog : program) : state =
-  let rec assemble (p : program) (mem : memory) (reg : regfile) 
-        (start : int32) (curr : int32) =
-      match prog with
-          [] -> { r = reg; pc = start; m = mem }
-        | hd :: tl ->
-            let ins = Int32.of_string (Mach.mips_to_mach hd) in
-              assemble tl (mem_update curr (mk_byte ins) mem)
-                reg start (Int32.add curr word)
+  let split_word str =
+    let b_one   = bin2b (String.sub str 0 8) in
+    let b_two   = bin2b (String.sub str 8 8) in
+    let b_three = bin2b (String.sub str 16 8) in
+    let b_four  = bin2b (String.sub str 24 8) in
+      b_one :: b_two :: b_three :: b_four :: []
   in
+
+  let rec put_word bytes mem addr =
+    match bytes with
+        [] -> mem
+      | hd :: tl -> put_word tl (mem_update addr hd mem) (Int32.add addr one_byte)
+  in
+
+  let rec load_prog (mach : string list) (mem : memory) (addr : int32) =
+      match mach with
+          [] -> mem
+        | hd :: tl ->
+            let ins = split_word hd in
+              load_prog tl (put_word ins mem addr) (Int32.add addr four_bytes)
+  in
+
+  let machine_code = Mach.assem prog in
   let start_address = Int32.of_string "0x42424242" in
-    assemble prog empty_mem empty_rf start_address start_address
+  let mem = load_prog machine_code empty_mem start_address in
+    { r = empty_rf; pc = start_address; m = mem }
 ;;
 
 (* Given a starting state, simulate the Mips machine code to get a final state *)

@@ -69,9 +69,9 @@ let int_to_bin (i : int * int) : string =
     int32_to_bin j
 ;;
 
-let rec mips_to_mach (i : inst) : string =
-  let rec convert i =
-    match i with
+let rec assem (instructions : inst list) : (string list) =
+  let rec assem_instruction instruction =
+    match instruction with
         Add (rd, rs, rt) ->
           int_to_bin (6, 0)^
           int_to_bin (5, reg2ind rs)^
@@ -94,10 +94,10 @@ let rec mips_to_mach (i : inst) : string =
           int32_to_bin (26, target)
       | Li  (rd, imm) ->
           let bin = int32_to_bin(32, imm) in
-          let upper_word = "0b"^(String.sub bin 0 16) in
-          let lower_word = "0b"^(String.sub bin 16 16) in
-            mips_to_mach (Lui (rd, Int32.of_string upper_word))^
-            mips_to_mach (Ori (rd, rd, Int32.of_string lower_word))
+          let upper_word = Int32.of_string("0b"^(String.sub bin 0 16)) in
+          let lower_word = Int32.of_string("0b"^(String.sub bin 16 16)) in
+            assem_instruction (Ori (rd, rd, lower_word))^
+            assem_instruction (Lui (rd, upper_word))
       | Lui (rt, imm) ->
           int_to_bin (6, 15)^
           int_to_bin (5, 0)^
@@ -119,6 +119,18 @@ let rec mips_to_mach (i : inst) : string =
           int_to_bin (5, reg2ind rt)^
           int32_to_bin (16, offset)
   in
-    "0b"^(convert i)
+
+  let rec assem_instructions (i : inst list) (accum : string list) : string list =
+    match i with
+        [] -> accum
+      | hd :: tl -> 
+          let mach = assem_instruction hd in
+            if String.length mach > 32 then
+              assem_instructions tl ((String.sub mach 0 32) :: (String.sub mach) 32 32 :: accum)
+            else
+              assem_instructions tl (mach :: accum)
+  in
+    List.rev (assem_instructions instructions [])
 ;;
+
 

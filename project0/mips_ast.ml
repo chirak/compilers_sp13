@@ -4,11 +4,13 @@ type label = string
 
 type reg = R0 
      | R1  (* DO NOT USE ME:  assembler temp *)
-     | R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 
-     | R10 | R11 | R12 | R13 | R14 | R15 | R16 | R17 | R18 | R19
-     | R20 | R21 | R22 | R23 | R24 | R25 
+     | R2 | R3 (* Use for function results *)
+     | R4 | R5 | R6 | R7 (* Used for subroutines parameters *)
+     | R8 | R9 | R10 | R11 | R12 | R13 | R14 | R15 (* used inside subroutines *)
+     | R16 | R17 | R18 | R19 | R20 | R21 | R22 | R23 (* Perserved accross proc calls *)
+     | R24 | R25 (* Temporaries *)
      | R26 | R27 (* DO NOT USE ME: reserved for OS *)
-     | R28
+     | R28 (* Global pointer *)
      | R29 | R30 |R31  (* used for special purposes... *)
 
 let reg2str r = 
