@@ -12,3 +12,37 @@ is to put the 32-bit encodings of each mips assembly instruction in memory,
 start the PC at the beginning of the machine code, and provide an empty
 register file. The interp function can then take this initial state and 
 produce a final state by "executing" the machine code.
+
+ MIPS Instruction encoding schemes:
+
+ Register Encoding (Add)
+   26-31 (6): opcode
+   21-25 (5): source register 1
+   16-20 (5): source register 2
+   11-15 (5): destination register
+   6-10  (5): shift value (for shift instructions only)
+   0-5   (6): function value
+
+ Immediate Encoding (Beq, Ori, Lw, Sw)
+   26-31 (6): opcode
+   21-25 (5): source register 1
+   16-20 (5): destination register
+   0-15 (16): immediate value
+
+ Load Immediate Encoding (Lui)
+   26-31 (6): opcode
+   21-25 (5): empty buffer space (0)
+   16-20 (5): destination register
+   0-15 (16): immediate value
+   
+ Jump Encoding (Jal)
+   26-31 (6): opcode
+   0-25 (26): immediate value
+
+ Jump Register Encoding (Jr)
+   26-31 (6): opcode
+   21-25 (5): destination register
+   6-20 (15): empty buffer space (0)
+   0-5   (6): function value
+
+ Psuedo Instructions (Li)

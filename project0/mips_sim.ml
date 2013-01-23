@@ -1,4 +1,5 @@
 open Mips_ast
+open Utils
 open Byte
 
 exception TODO
@@ -35,6 +36,72 @@ let string_of_mem (m : memory) : string =
 (* State *)
 type state = { r : regfile; pc : int32; m : memory }
 
+(****************************************************)
+
+let rec assemble (instructions : inst list) : (string list) =
+  let rec assem_instruction instruction =
+    match instruction with
+        Add (rd, rs, rt) ->
+          int_to_bin (6, 0)^
+          int_to_bin (5, reg2ind rs)^
+          int_to_bin (5, reg2ind rt)^
+          int_to_bin (5, reg2ind rd)^
+          int_to_bin (5, 0)^
+          int_to_bin (6, 32)
+      | Beq (rs, rt, offset) ->
+          int_to_bin (6, 4)^
+          int_to_bin (5, reg2ind rs)^
+          int_to_bin (5, reg2ind rt)^
+          int32_to_bin (16, offset)
+      | Jr rs  ->
+          int_to_bin (6, 0)^
+          int_to_bin (5, reg2ind rs)^
+          int_to_bin (15, 0)^
+          int_to_bin (6, 8)
+      | Jal target ->
+          int_to_bin(2, 6)^
+          int32_to_bin (26, target)
+      | Li  (rd, imm) ->
+          let bin = int32_to_bin(32, imm) in
+          let upper_word = bin_to_int32(String.sub bin 0 16) in
+          let lower_word = bin_to_int32(String.sub bin 16 16) in
+            assem_instruction (Ori (rd, rd, lower_word))^
+            assem_instruction (Lui (rd, upper_word))
+      | Lui (rt, imm) ->
+          int_to_bin (6, 15)^
+          int_to_bin (5, 0)^
+          int_to_bin (5, reg2ind rt)^
+          int32_to_bin (16, imm)
+      | Ori (rt, rs, imm) ->
+          int_to_bin (6, 13)^
+          int_to_bin (5, reg2ind rs)^
+          int_to_bin (5, reg2ind rt)^
+          int32_to_bin (16, imm)
+      | Lw  (rt, rs, offset) -> (* Double check this instruction layout *)
+          int_to_bin (6, 35)^
+          int_to_bin (5, reg2ind rs)^
+          int_to_bin (5, reg2ind rt)^
+          int32_to_bin (16, offset)
+      | Sw  (rt, rs, offset) -> (* Double check this instruction layout *)
+          int_to_bin (6, 35)^
+          int_to_bin (5, reg2ind rs)^
+          int_to_bin (5, reg2ind rt)^
+          int32_to_bin (16, offset)
+  in
+
+  let rec assem_instructions (i : inst list) (accum : string list) : string list =
+    match i with
+        [] -> accum
+      | hd :: tl -> 
+          let mach = assem_instruction hd in
+            if String.length mach > 32 then
+              assem_instructions tl ((String.sub mach 0 32) :: (String.sub mach) 32 32 :: accum)
+            else
+              assem_instructions tl (mach :: accum)
+  in
+    List.rev (assem_instructions instructions [])
+;;
+
 (* Map a program, a list of Mips assembly instructions, down to a starting 
    state. You can start the PC at any address you wish. Just make sure that 
    you put the generated machine code where you started the PC in memory! *)
@@ -61,48 +128,35 @@ let rec assem (prog : program) : state =
               load_prog tl (put_word ins mem addr) (Int32.add addr four_bytes)
   in
 
-  let machine_code = Mach.assem prog in
+  let machine_code = assemble prog in
   let start_address = Int32.of_string "0x42424242" in
   let mem = load_prog machine_code empty_mem start_address in
     { r = empty_rf; pc = start_address; m = mem }
 ;;
 
+(****************************************************)
+
+
+
 (* Given a starting state, simulate the Mips machine code to get a final state *)
 let rec interp (init_state : state) : state = raise TODO;;
 
-(*
- MIPS Instruction encoding schemes:
 
- Register Encoding (Add)
-   26-31 (6): opcode
-   21-25 (5): source register 1
-   16-20 (5): source register 2
-   11-15 (5): destination register
-   6-10  (5): shift value (for shift instructions only)
-   0-5   (6): function value
 
- Immediate Encoding (Beq, Ori, Lw, Sw)
-   26-31 (6): opcode
-   21-25 (5): source register 1
-   16-20 (5): destination register
-   0-15 (16): immediate value
 
- Load Immediate Encoding (Lui)
-   26-31 (6): opcode
-   21-25 (5): empty buffer space (0)
-   16-20 (5): destination register
-   0-15 (16): immediate value
-   
- Jump Encoding (Jal)
-   26-31 (6): opcode
-   0-25 (26): immediate value
 
- Jump Register Encoding (Jr)
-   26-31 (6): opcode
-   21-25 (5): destination register
-   6-20 (15): empty buffer space (0)
-   0-5   (6): function value
 
- Psuedo Instructions (Li)
-   
- *)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
