@@ -37,8 +37,13 @@ let string_of_mem (m : memory) : string =
 (* State *)
 type state = { r : regfile; pc : int32; m : memory }
 
-(****************************************************)
 
+(*********************************)
+(********* PART 1: ASSEM *********)
+(*********************************)
+
+
+(* Returns list of machine code instructions from the given mips instructions *)
 let rec assemble (instructions : inst list) : (string list) =
   let rec assem_instruction instruction =
     match instruction with
@@ -84,7 +89,7 @@ let rec assemble (instructions : inst list) : (string list) =
           int_to_bin (5, reg2ind rt)^
           int32_to_bin (16, offset)
       | Sw  (rt, rs, offset) -> (* Double check this instruction layout *)
-          int_to_bin (6, 35)^
+          int_to_bin (6, 43)^
           int_to_bin (5, reg2ind rs)^
           int_to_bin (5, reg2ind rt)^
           int32_to_bin (16, offset)
@@ -103,12 +108,14 @@ let rec assemble (instructions : inst list) : (string list) =
     List.rev (assem_instructions instructions [])
 ;;
 
+(* Puts the given list of bytes at the given memory address *)
 let rec put_bytes bytes mem addr =
 match bytes with
     [] -> mem
   | hd :: tl -> put_bytes tl (mem_update addr hd mem) (Int32.add addr one_byte)
 ;;
 
+(* Loads a four byte word from memory at the given address *)
 let load_word (mem : memory) (addr : int32) : word =
   let bytes =
     (mem_lookup addr mem) ::
@@ -124,8 +131,10 @@ let load_word (mem : memory) (addr : int32) : word =
    you put the generated machine code where you started the PC in memory! *)
 let rec assem (prog : program) : state =
 
+  (* Lays out program in memeory *)
   let rec load_prog (mach : word list) (mem : memory) (addr : int32) =
       match mach with
+          (* Append program exit instruction to end *)
           [] -> put_bytes (split_word (mk_word Int32.zero)) mem addr
         | hd :: tl ->
             let ins = split_word hd in
@@ -138,9 +147,12 @@ let rec assem (prog : program) : state =
     { r = empty_rf; pc = start_address; m = mem }
 ;;
 
-(****************************************************)
+(**********************************)
+(********* PART 2: INTERP *********)
+(**********************************)
 
 
+(* All of interpreter's mips instructions *)
 let add (instr : word) (s : state) : state =
   let rs_val = rf_lookup (get_rs instr) s.r in
   let rt_val = rf_lookup (get_rt instr) s.r in
@@ -154,7 +166,7 @@ let beq (instr : word) (s : state) : state =
   let rt_val = rf_lookup (get_rt instr) s.r in
   let new_pc =
     if rs_val = rt_val then
-      Int32.add (Int32.of_int (get_offset instr)) s.pc
+      Int32.add (Int32.of_int ((get_offset instr) * 4)) s.pc
     else
       Int32.add 4l s.pc
   in
@@ -167,7 +179,6 @@ let jr (instr : word) (s : state) : state =
     { r = s.r; pc = new_pc; m = s.m }
 ;;
 
-(* Returns new PC memory adderss *)
 let jal (instr : word) (s : state) : state =
   let return_address = Int32.add s.pc 4l in
   let jump_address = Int32.of_int (get_address instr) in
@@ -175,8 +186,6 @@ let jal (instr : word) (s : state) : state =
     { r = new_reg; pc = jump_address; m = s.m }
 ;;
 
-
-(* Does register update, returns unit *)
 let lui (instr : word) (s : state) : state =
   let imm_bin = int_to_bin (16, get_immed instr) in
   let imm_dec = Int32.of_string ("0b"^imm_bin^"0000000000000000") in
@@ -184,7 +193,6 @@ let lui (instr : word) (s : state) : state =
     { r = new_reg; pc = (Int32.add s.pc 4l); m = s.m }
 ;;
 
-(* Does register update, returns unit *)
 let ori (instr : word) (s : state) : state =
   let rs_val = rf_lookup (get_rs instr) s.r in
   let imm_val = Int32.of_int (get_immed instr) in
@@ -193,7 +201,6 @@ let ori (instr : word) (s : state) : state =
     { r = new_reg; pc = (Int32.add s.pc 4l); m = s.m }
 ;;
 
-(* Does register update, returns unit *)
 let lw (instr : word) (s : state) : state =
   let rs_val = rf_lookup (get_rs instr) s.r in
   let off_val = Int32.of_int(get_offset instr) in
@@ -203,19 +210,18 @@ let lw (instr : word) (s : state) : state =
     { r = new_reg; pc = (Int32.add s.pc 4l); m = s.m }
 ;;
 
-(* Updates memory, and returns unit *)
 let sw (instr : word) (s : state) : state =
   let rt_val = rf_lookup (get_rt instr) s.r in
   let rs_val = rf_lookup (get_rs instr) s.r in
   let offset_val = Int32.of_int (get_offset instr) in
   let mem_addr = Int32.add rs_val offset_val in
-
   let bytes = split_word (mk_word rt_val) in
   let new_mem = put_bytes bytes s.m mem_addr in
     { r = s.r; pc = (Int32.add s.pc 4l); m = new_mem }
 ;;
 
-let get_op instr =
+(* Returns operation corresponding to given machine code instruction *)
+let get_op (instr : word) =
   let op_code = get_opcode instr in
   let func_code = get_func instr in
     match op_code with
@@ -226,12 +232,9 @@ let get_op instr =
             add
           else
             raise FatalError
-      | 3  -> jal
-      | 4  -> beq
-      | 13 -> ori
-      | 15 -> lui
-      | 35 -> lw
-      | 43 -> sw
+      | 3  -> jal | 4  -> beq
+      | 13 -> ori | 15 -> lui
+      | 35 -> lw  | 43 -> sw
       | _  -> raise FatalError
 ;;
 
