@@ -31,6 +31,12 @@ let parse_error s =
  * You will need to augment this with your own tokens...
  */
 %token <int> INT 
+%token <string> VAR
+%token EQUAL SEMI RETURN
+%token FOR WHILE
+%token LPAREN RPAREN LBRACE RBRACE /* grouping tokens */
+%token PLUS MINUS TIMES DIVIDE /* arithmatic op. tokens */
+%token GT GTE LT LTE EQ NEQ AND OR NOT /* boolean op. tokens */
 %token EOF
 
 /* Here's where the real grammar starts -- you'll need to add 
@@ -39,6 +45,31 @@ let parse_error s =
 
 program:
   stmt EOF { $1 }
+;
 
 stmt :
-  /* empty */ { (Ast.skip, 0) } 
+  RETURN binop SEMI { (Return $2, 1) }
+;
+
+binop:
+  LPAREN binop RPAREN { }
+| binop PLUS binop { (Binop($1, Plus, $3), 0) }
+| binop MINUS binop { (Binop($1, Minus, $3), 0) }
+| binop EQ binop { (Binop($1, Eq, $3), 0) }
+| prod { $1 }
+;
+
+prod:
+  LPAREN prod RPAREN { $2 }
+| prod TIMES prod { (Binop($1, Times, $3), 0) }
+| prod DIVIDE prod { (Binop($1, Div, $3), 0) }
+| value { $1 }
+;
+
+value:
+  INT { (Int($1), 1) }
+| VAR { (Var($1), 1) }
+;
+
+
+
