@@ -50,7 +50,7 @@ let rec eval_exp ((e:rexp),(pos:int)) : int =
       if (eval_exp e1) <> 0 then eval_exp e2 else 0
   | Or(e1,e2) ->
       if (eval_exp e1) <> 0 then 1 else eval_exp e2
-  | Assign(x,e1) -> set x (eval_exp e1)
+  | Assign(x,e1) -> Printf.printf "Assign POS:%d\n" pos; set x (eval_exp e1)
 
 (* Evaluate a fish statement.  We signal "returning" a value
  * for the program by throwing the exception Done.  *)
@@ -61,6 +61,7 @@ let rec eval_stmt ((s:rstmt),(pos:int)) : unit =
     Exp e -> let _ = eval_exp e in () 
   | Seq(s1,s2) -> (eval_stmt s1; eval_stmt s2)
   | If(e,s1,s2) -> 
+      Printf.printf "If POS:%d\n" pos;
       if (eval_exp e) <> 0 then eval_stmt s1 else eval_stmt s2
   | While(e,s1) -> eval_stmt (If(e,(Seq(s1,(s,pos)),pos),(skip,pos)),pos)
   | For(e1,e2,e3,s1) -> (

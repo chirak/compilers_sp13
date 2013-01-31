@@ -24,6 +24,7 @@ let eol=(cr nl|nl|cr)
 let ws=('\012'|'\t'|' ')*
 let digit=['0'-'9'] 
 let ch = ['A'-'Z''a'-'z''_''.']['.''a'-'z''A'-'Z''0'-'9''_']*
+let all = [^ '\n']
 
 
 (* rules section *)
@@ -31,6 +32,7 @@ rule lexer =
     parse
 | eol { incr_lineno lexbuf; lexer lexbuf } 
 | ws+ { lexer lexbuf }
+| ("/*")(all|eol)*("*/") { println "COMMENT"; COMMENT }
 | "=" { println "EQUAL"; EQUAL }
 | ";" { println "SEMI"; SEMI }
 | "return" { println "RETURN"; RETURN }
