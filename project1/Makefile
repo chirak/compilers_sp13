@@ -22,6 +22,7 @@ yacc: com
 	$(COMPILER) -c lex.ml
 	$(COMPILER) -c fishyacc.ml
 	$(COMPILER) -o ps1yacc ast.cmo parse.cmo lex.cmo eval.cmo fishyacc.cmo
+	cp ps1yacc test/
 
 clean:
-	-rm *.cmo *.cmi ps1yacc parse.ml parse.mli lex.ml
+	-rm *.cmo *.cmi ps1yacc test/ps1yacc parse.ml parse.mli lex.ml

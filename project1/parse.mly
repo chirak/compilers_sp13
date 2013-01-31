@@ -48,21 +48,40 @@ program:
 ;
 
 stmt :
-  RETURN binop SEMI { (Return $2, 1) }
+  RETURN rexp SEMI { (Return $2, 1) }
 ;
 
-binop:
-  LPAREN binop RPAREN { }
-| binop PLUS binop { (Binop($1, Plus, $3), 0) }
-| binop MINUS binop { (Binop($1, Minus, $3), 0) }
-| binop EQ binop { (Binop($1, Eq, $3), 0) }
+rexp:
+  LPAREN rexp RPAREN { $2 }
+| rexp PLUS prod { (Binop($1, Plus, $3), 0) }
+| rexp MINUS prod { (Binop($1, Minus, $3), 0) }
+| rexp EQ prod { (Binop($1, Eq, $3), 0) }
 | prod { $1 }
 ;
 
 prod:
   LPAREN prod RPAREN { $2 }
-| prod TIMES prod { (Binop($1, Times, $3), 0) }
-| prod DIVIDE prod { (Binop($1, Div, $3), 0) }
+| prod TIMES log { (Binop($1, Times, $3), 0) }
+| prod DIVIDE log { (Binop($1, Div, $3), 0) }
+| log { $1 }
+;
+
+log:
+  LPAREN log RPAREN { $2 }
+| log AND log { (And($1, $3), 0) }
+| log OR log { (Or($1, $3), 0) }
+| NOT log { (Not ($2), 0) }
+| alog { $1 }
+;
+
+alog:
+  LPAREN alog RPAREN { $2 }
+| alog EQ alog { (Binop($1, Eq, $3), 0) }
+| alog NEQ alog { (Binop($1, Neq, $3), 0) }
+| alog GT alog { (Binop($1, Gt, $3), 0) }
+| alog GTE alog { (Binop($1, Gte, $3), 0) }
+| alog LT alog { (Binop($1, Lt, $3), 0) }
+| alog LTE alog { (Binop($1, Lte, $3), 0) }
 | value { $1 }
 ;
 
@@ -70,6 +89,4 @@ value:
   INT { (Int($1), 1) }
 | VAR { (Var($1), 1) }
 ;
-
-
 

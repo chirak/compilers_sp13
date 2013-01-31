@@ -1,5 +1,3 @@
-(* Lexer for Fish --- TODO *)
-
 (* You need to add new definition to build the
  * appropriate terminals to feed to parse.mly.
  *)
@@ -52,6 +50,7 @@ rule lexer = parse
 | "||" { OR }
 | "!" { NOT }
 | digit+ { INT(int_of_string(Lexing.lexeme lexbuf)) } 
+| '-'digit+ { INT(int_of_string(Lexing.lexeme lexbuf)) } 
 | ch+ { VAR(Lexing.lexeme lexbuf) }
 | eof { EOF }
 
