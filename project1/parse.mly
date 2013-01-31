@@ -47,12 +47,16 @@ program:
   stmt EOF { $1 }
 ;
 
-stmt :
-  RETURN rexp SEMI { (Return $2, 1) }
+stmt:
+  LBRACE stmt RBRACE { $2 }
+| rexp SEMI { (Exp $1, 0) }
+| stmt stmt { (Seq($1, $2), 0) }
+| RETURN rexp SEMI { (Return $2, 1) }
 ;
 
 rexp:
   LPAREN rexp RPAREN { $2 }
+| VAR EQUAL rexp { (Assign($1, $3), 0) }
 | rexp PLUS prod { (Binop($1, Plus, $3), 0) }
 | rexp MINUS prod { (Binop($1, Minus, $3), 0) }
 | rexp EQ prod { (Binop($1, Eq, $3), 0) }
