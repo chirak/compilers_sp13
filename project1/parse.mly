@@ -33,7 +33,7 @@ let parse_error s =
 %token <int> INT 
 %token <string> VAR
 %token EQUAL SEMI RETURN
-%token FOR WHILE
+%token FOR WHILE IF ELSE
 %token LPAREN RPAREN LBRACE RBRACE /* grouping tokens */
 %token PLUS MINUS TIMES DIVIDE /* arithmatic op. tokens */
 %token GT GTE LT LTE EQ NEQ AND OR NOT /* boolean op. tokens */
