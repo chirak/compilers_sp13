@@ -51,6 +51,8 @@ stmt:
   LBRACE stmt RBRACE { $2 }
 | rexp SEMI { (Exp $1, 0) }
 | stmt stmt { (Seq($1, $2), 0) }
+| IF rexp LBRACE stmt RBRACE ELSE LBRACE stmt RBRACE
+    { (If($2, $4, $8), 0) }
 | RETURN rexp SEMI { (Return $2, 1) }
 ;
 
