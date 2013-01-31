@@ -54,14 +54,3 @@ rule lexer = parse
 | ch+ { VAR(Lexing.lexeme lexbuf) }
 | eof { EOF }
 
-(*
- *
-r0: Goal → Sums eof
-r1: Sums → Sums + Products
-r2: Sums → Products
-r3: Products → Products * Value
-r4: Products → Value
-r5: Value → int
-r6: Value → id
-
-*)
