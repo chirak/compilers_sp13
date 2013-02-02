@@ -37,8 +37,13 @@ let parse_error s =
 %token LPAREN RPAREN LBRACE RBRACE /* grouping tokens */
 %token PLUS MINUS TIMES DIVIDE /* arithmatic op. tokens */
 %token GT GTE LT LTE EQ NEQ AND OR NOT /* boolean op. tokens */
-%token COMMENT
 %token EOF
+
+%left EQUAL
+%left AND OR NOT
+%left EQ NEQ GT GTE LT LTE
+%left PLUS MINUS
+%left DIVIDE TIMES
 
 /* Here's where the real grammar starts -- you'll need to add 
  * more rules here... Do not remove the 2%'s!! */
@@ -49,11 +54,12 @@ program:
 ;
 
 stmt:
-  COMMENT { (Ast.skip, rhs 0) }
-| LBRACE stmt RBRACE { $2 }
+  LBRACE stmt RBRACE { $2 }
 | rexp SEMI { (Exp $1, rhs 0) }
 | stmt stmt { (Seq($1, $2), rhs 0) }
-| IF rexp stmt ELSE stmt
+| IF rexp stmt 
+    { (If($2, $3, (Ast.skip, rhs 0)), rhs 0) }
+| IF rexp stmt ELSE stmt 
     { (If($2, $3, $5), rhs 0) }
 | WHILE rexp LBRACE stmt RBRACE
     { (While($2, $4), rhs 0) }
@@ -63,42 +69,22 @@ stmt:
 ;
 
 rexp:
-  LPAREN rexp RPAREN { $2 }
-| VAR EQUAL rexp { (Assign($1, $3), rhs 0) }
-| rexp PLUS prod { (Binop($1, Plus, $3), rhs 0) }
-| rexp MINUS prod { (Binop($1, Minus, $3), rhs 0) }
-| rexp EQ prod { (Binop($1, Eq, $3), rhs 0) }
-| prod { $1 }
-;
-
-prod:
-  LPAREN prod RPAREN { $2 }
-| prod TIMES log { (Binop($1, Times, $3), rhs 0) }
-| prod DIVIDE log { (Binop($1, Div, $3), rhs 0) }
-| log { $1 }
-;
-
-log:
-  LPAREN log RPAREN { $2 }
-| log AND log { (And($1, $3), rhs 0) }
-| log OR log { (Or($1, $3), rhs 0) }
-| NOT log { (Not ($2), rhs 0) }
-| alog { $1 }
-;
-
-alog:
-  LPAREN alog RPAREN { $2 }
-| alog EQ alog { (Binop($1, Eq, $3), rhs 0) }
-| alog NEQ alog { (Binop($1, Neq, $3), rhs 0) }
-| alog GT alog { (Binop($1, Gt, $3), rhs 0) }
-| alog GTE alog { (Binop($1, Gte, $3), rhs 0) }
-| alog LT alog { (Binop($1, Lt, $3), rhs 0) }
-| alog LTE alog { (Binop($1, Lte, $3), rhs 0) }
-| value { $1 }
-;
-
-value:
-  INT { (Int($1), 1) }
+  VAR EQUAL rexp { (Assign($1, $3), rhs 0) }
+| LPAREN rexp RPAREN { $2 }
+| rexp AND rexp { (And($1, $3), rhs 0) }
+| rexp OR rexp { (Or($1, $3), rhs 0) }
+| NOT rexp { (Not ($2), rhs 0) }
+| rexp EQ rexp { (Binop($1, Eq, $3), rhs 0) }
+| rexp NEQ rexp { (Binop($1, Neq, $3), rhs 0) }
+| rexp GT rexp { (Binop($1, Gt, $3), rhs 0) }
+| rexp GTE rexp { (Binop($1, Gte, $3), rhs 0) }
+| rexp LT rexp { (Binop($1, Lt, $3), rhs 0) }
+| rexp LTE rexp { (Binop($1, Lte, $3), rhs 0) }
+| rexp PLUS rexp { (Binop($1, Plus, $3), rhs 0) }
+| rexp MINUS rexp { (Binop($1, Minus, $3), rhs 0) }
+| rexp TIMES rexp { (Binop($1, Times, $3), rhs 0) }
+| rexp DIVIDE rexp { (Binop($1, Div, $3), rhs 0) }
+| INT { (Int($1), 1) }
 | VAR { (Var($1), 1) }
 ;
 
