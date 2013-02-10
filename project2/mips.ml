@@ -11,13 +11,17 @@
 type label = string
 
 type reg = R0 
-            | R1  (* DO NOT USE ME:  assembler temp *)
-     | R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 
-            | R10 | R11 | R12 | R13 | R14 | R15 | R16 | R17 | R18 | R19
-     | R20 | R21 | R22 | R23 | R24 | R25 
-     | R26 | R27 (* DO NOT USE ME: reserved for OS *)
-     | R28
-            | R29 | R30 |R31  (* used for special purposes... *)
+  | R1  (* DO NOT USE ME:  assembler temp *)
+  | R2 | R3 (* Values for function return and expression evaluation *)
+  | R4 | R5 | R6 | R7 (* Function arguments *)
+  | R8 | R9 | R10 | R11 | R12 | R13 | R14 | R15 (* Temporaries *)
+  | R16 | R17 | R18 | R19 | R20 | R21 | R22 | R23 (* Saved Temporaries *)
+  | R24 | R25 (* Temporaries *)
+  | R26 | R27 (* DO NOT USE ME: reserved for OS *)
+  | R28 (* Global pointer, $gp *)
+  | R29 (* Stack pointer, $sp *)
+  | R30 (* Frame pointer, $fp *)
+  | R31 (* Return address, $ra *)
 
 type operand = Reg of reg | Immed of Word32.word
 
@@ -65,6 +69,7 @@ type inst =
 | Sh of reg * reg * Word32.word
 | Sw of reg * reg * Word32.word
 | Label of label
+| Syscall
 
 
 (* The functions below are used to convert MIPS instructions
@@ -153,4 +158,5 @@ let inst2string(i:inst):string =
   | Sh (r1,r2,w) -> i2as "sh" (r1,r2,w)
   | Sw (r1,r2,w) -> i2as "sw" (r1,r2,w)
   | Label x -> x ^ ":" 
+  | Syscall -> "\tsyscall"
       

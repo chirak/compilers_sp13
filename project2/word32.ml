@@ -4,6 +4,8 @@ open Int32
 
 type word = int32
 
+let zero = Int32.zero
+
 (* Convert an int into a word. You will want to use this function for
  * Mips operations that require an immediate. *)
 let fromInt n = Int32.of_int n
