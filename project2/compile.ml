@@ -123,7 +123,7 @@ let rec compile_stmt ((s,_):Ast.stmt) : inst list =
     | For(e1,e2,e3,s) ->
         compile_stmt(Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3, 0)), 0)), 0) ), 0)
     | Return e -> 
-        (* Store result in R8 and exit the program *)
+        (* Store result in temporary register R8 and exit the program *)
         compile_exp e @ [Add(R8, R2, Reg R0); Li(R2, 10l); Syscall]
 ;;
 
