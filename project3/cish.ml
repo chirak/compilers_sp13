@@ -44,7 +44,7 @@ let compile_prog prog =
   result2string { code = replace_main compiled.code;
 		  data = compiled.data }
 
-(* Usage ps3 [file-to-compile] *)
+(* Usage ./ps3 [file-to-compile] *)
 let _ =
   let prog = parse_file() in
   print_string (compile_prog prog) 
