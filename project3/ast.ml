@@ -34,6 +34,11 @@ and stmt = rstmt * pos
 type funcsig = { name : var; args : var list; body : stmt; pos : pos }
 type func = Fn of funcsig
 
+let get_funcsig (f : func) : funcsig =
+  match f with
+      Fn s -> s
+    | _ -> raise Not_found
+
 let skip : rstmt = Exp(Int 0,0)          (* simulate a skip statement *)
 
 type program = func list

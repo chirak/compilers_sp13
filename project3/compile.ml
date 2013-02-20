@@ -19,6 +19,7 @@ type result = { code : Mips.inst list;
                 data : Mips.label list }
 ;;
 
+type location = Register of reg | Offset of int
 type funenv = (string * int) list;;
 
 let funenv_insert (var : string) (env : funenv) : funenv =
@@ -129,7 +130,7 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
   let rec fun_prologue (exps : (exp * int) list) (env : funenv) : inst list =
     let get_arg_inst (arg : exp) (i : int) : inst list =
       let arg_inst = compile_exp arg env in
-      let off = Int32.of_int ((funenv_size env) - (i*4)) in
+      let off = Int32.of_int (i*4) in
         arg_inst @ [Sw(R2, R29, off)]
     in
     let partial_prologue =
@@ -155,16 +156,27 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
     let fp_offset = Int32.of_int (stack_size - 8) in
     [Mips.Lw(R31, R29, return_offset); (* restore return address*)
      Mips.Lw(R30, R29, fp_offset); (* restore frame pointer *)
-     Mips.Add(R29, R29, Immed (Int32.of_int stack_size));
-     Mips.Jr(R31);] (* return to callee *)
+     Mips.Add(R29, R29, Immed (Int32.of_int stack_size));] (* return to callee *)
   in
+
+  (* let store_args (exps : exp list) (frame : env) : inst list = *)
+  (*   let regs : Mips.reg list = [R4;R5;R6;R7] in *)
+  (*   let exp_regs = zip regs exps in *)
+
+  (*   let rec get_inst (arg : (Mips.reg * exp)) : inst list = *)
+  (*     match arg with *)
+  (*         [] -> [] *)
+  (*       | hd :: tl -> *)
+  (*           let r, e = hd in *)
+  (*             (compile_exp e frame) @ [ *)
 
   let e, pos = i in
   match e with
     | Int j -> 
         [Li(R2,  Word32.fromInt j)]
-    | Var x -> 
-        [La(R2,(var_prefix^x)); Lw(R2, R2, Word32.zero)]
+    | Var x ->
+        let offset = funenv_lookup x frame in
+          [Lw(R2, R29, offset)]
     | Binop(i1, b, i2) ->
         (exp_prec i1 i2)
        @(match b with
@@ -184,7 +196,9 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
         (exp_prec i1 i2) @ [Mips.And(R2, R2, Reg R3)]
     | Or  (i1, i2) ->
         (exp_prec i1 i2) @ [Mips.Or(R2, R2, Reg R3)]
-    | Assign(x,e) -> (compile_exp e frame) @ [La(R3,(var_prefix^x)); Sw(R2,R3,Word32.zero)]
+    | Assign(x,e) -> 
+        let offset = funenv_lookup x frame in
+          (compile_exp e frame) @ [Sw(R2,R29,offset)]
     | Call(v, exps) -> 
         let v_env = Hashtbl.find funenv_table v in
         let exp_offsets = zip exps (funenv_offsets v_env) in
@@ -217,8 +231,7 @@ let rec compile_stmt ((s,_):Ast.stmt) (frame : funenv) : inst list =
            [Mips.Bne(R2,R0,top_l)])
     | For(e1,e2,e3,s) ->
         compile_stmt (Seq((Exp e1, 0),(While(e2,(Seq(s,(Exp e3, 0)), 0)), 0) ), 0) frame
-    | Return e -> 
-        compile_exp e frame 
+    | Return e -> (compile_exp e frame) @ [Mips.Jr(R31)]
         (* Store result in temporary register R8 and exit the program *)
         (* [Add(R8, R2, Reg R0); Li(R2, 10l); Syscall] *)
     | Let(v,e,s) ->
@@ -251,7 +264,10 @@ let compile (p : Ast.program) : result =
   in
     let _ = reset() in
     let _ = init_fun_envs p in
-      { code = compile_prog p; data = VarSet.elements (!variables) }
+    let _ = funenv_table_print funenv_table in
+    let _ = print_string "------------------\n" in
+    let inst = compile_prog p in 
+      { code = inst; data = VarSet.elements (!variables) }
 ;;
 
 let result2string ({code;data}:result) : string = 
