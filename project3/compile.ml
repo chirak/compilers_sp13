@@ -6,6 +6,8 @@ exception IMPLEMENT_ME;;
 exception BadProgram;;
 let error s = (print_string ("Error: "^ s); raise BadProgram);;
 
+let arg_regs : Mips.reg list = [R4;R5;R6;R7]
+
 let rec zip lst1 lst2 = 
   match lst1,lst2 with 
       [],_ -> []
@@ -19,7 +21,6 @@ type result = { code : Mips.inst list;
                 data : Mips.label list }
 ;;
 
-type location = Register of reg | Offset of int
 type funenv = (string * int) list;;
 
 let funenv_insert (var : string) (env : funenv) : funenv =
@@ -159,16 +160,20 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
      Mips.Add(R29, R29, Immed (Int32.of_int stack_size));] (* return to callee *)
   in
 
-  (* let store_args (exps : exp list) (frame : env) : inst list = *)
-  (*   let regs : Mips.reg list = [R4;R5;R6;R7] in *)
-  (*   let exp_regs = zip regs exps in *)
+  let store_args (exps : exp list) : inst list =
+    let regs : Mips.reg list = [R4;R5;R6;R7] in
+    let exp_regs = zip regs exps in
 
-  (*   let rec get_inst (arg : (Mips.reg * exp)) : inst list = *)
-  (*     match arg with *)
-  (*         [] -> [] *)
-  (*       | hd :: tl -> *)
-  (*           let r, e = hd in *)
-  (*             (compile_exp e frame) @ [ *)
+    let rec get_inst (arg : (Mips.reg * exp) list) : inst list =
+      match arg with
+          [] -> []
+        | hd :: tl ->
+            let r, e = hd in
+              (compile_exp e frame) @ [Mips.Add(r, R2, Immed Word32.zero)]
+              @ get_inst tl
+    in
+      get_inst exp_regs
+  in
 
   let e, pos = i in
   match e with
@@ -201,8 +206,14 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
           (compile_exp e frame) @ [Sw(R2,R29,offset)]
     | Call(v, exps) -> 
         let v_env = Hashtbl.find funenv_table v in
+        let store_inst =
+          if List.length exps > 0 then store_args exps else []
+        in
         let exp_offsets = zip exps (funenv_offsets v_env) in
-          (fun_prologue exp_offsets v_env) @ [Jal v] @ (fun_epilogue v_env)
+          store_inst @
+          (fun_prologue exp_offsets v_env) @
+          [Jal v] @
+          (fun_epilogue v_env)
 ;;
 
 (* compiles a Fish statement down to a list of MIPS instructions.
@@ -270,8 +281,8 @@ let compile (p : Ast.program) : result =
       { code = inst; data = VarSet.elements (!variables) }
 ;;
 
-let result2string ({code;data}:result) : string = 
-    let strs = List.map (fun x -> (Mips.inst2string x) ^ "\n") code in
+let result2string (r:result) : string = 
+    let strs = List.map (fun x -> (Mips.inst2string x) ^ "\n") r.code in
     let var2decl x = x ^ ":\t.word 0\n" in
     "\t.text\n" ^
     "\t.align\t2\n" ^
@@ -280,6 +291,5 @@ let result2string ({code;data}:result) : string =
     "\n\n" ^
     "\t.data\n" ^
     "\t.align 0\n"^
-    (String.concat "" (List.map var2decl data))
+    (String.concat "" (List.map var2decl r.data))
 ;;
-
