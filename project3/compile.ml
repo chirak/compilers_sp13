@@ -128,18 +128,17 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
       @(compile_exp e2 frame) @ [La(R3, t); Lw(R3, R3, Word32.zero)]
   in
 
-  let rec fun_prologue (exps : (exp * int) list) (env : funenv) : inst list =
-    let get_arg_inst (arg : exp) (i : int) : inst list =
-      let arg_inst = compile_exp arg env in
+  let rec fun_prologue (regs : (Mips.reg * int) list) (env : funenv) : inst list =
+    let store_arg_inst (reg : Mips.reg) (i : int) : inst list =
       let off = Int32.of_int (i*4) in
-        arg_inst @ [Sw(R2, R29, off)]
+        [Sw(reg, R29, off)]
     in
-    let partial_prologue =
-      match exps with
+    let rec store_arg_insts (reg_offsets : (Mips.reg * int) list) : inst list =
+      match reg_offsets with
           [] -> []
         | hd :: tl ->
-            let e,offset = hd in
-              (get_arg_inst e offset) @ fun_prologue tl env
+            let r, o = hd in
+              (store_arg_inst r o) @ (store_arg_insts tl)
     in
     let stack_size = funenv_size env in
     let return_offset = Int32.of_int (stack_size - 4) in
@@ -148,7 +147,7 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
        Mips.Sw(R31, R29, return_offset); (* store return address *)
        Mips.Sw(R30, R29, fp_offset); (* store frame pointer *)
        Mips.Add(R30, R31, Immed return_offset); (* calculate new frame pointer *)
-      ] @ partial_prologue
+      ] @ (store_arg_insts regs)
   in
 
   let rec fun_epilogue (env : funenv) : inst list =
@@ -160,10 +159,9 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
      Mips.Add(R29, R29, Immed (Int32.of_int stack_size));] (* return to callee *)
   in
 
-  let store_args (exps : exp list) : inst list =
+  let store_args (exps : exp list) : (inst list * Mips.reg list) =
     let regs : Mips.reg list = [R4;R5;R6;R7] in
     let exp_regs = zip regs exps in
-
     let rec get_inst (arg : (Mips.reg * exp) list) : inst list =
       match arg with
           [] -> []
@@ -172,13 +170,20 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
               (compile_exp e frame) @ [Mips.Add(r, R2, Immed Word32.zero)]
               @ get_inst tl
     in
-      get_inst exp_regs
+
+    let rec get_arg_regs (len : int) (accum : Mips.reg list) : Mips.reg list =
+      if len = 0 then accum else get_arg_regs (len - 1) ((List.hd arg_regs) :: accum)
+    in
+
+    let i = get_inst exp_regs in
+    let arg_regs = List.rev (get_arg_regs (List.length i) []) in
+      (i, arg_regs)
   in
 
   let e, pos = i in
   match e with
     | Int j -> 
-        [Li(R2,  Word32.fromInt j)]
+        [Mips.Li(R2,  Word32.fromInt j)]
     | Var x ->
         let offset = funenv_lookup x frame in
           [Lw(R2, R29, offset)]
@@ -206,12 +211,10 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
           (compile_exp e frame) @ [Sw(R2,R29,offset)]
     | Call(v, exps) -> 
         let v_env = Hashtbl.find funenv_table v in
-        let store_inst =
-          if List.length exps > 0 then store_args exps else []
-        in
-        let exp_offsets = zip exps (funenv_offsets v_env) in
+        let store_inst, regs = store_args exps in
+        let reg_offsets = zip regs (funenv_offsets v_env) in
           store_inst @
-          (fun_prologue exp_offsets v_env) @
+          (fun_prologue reg_offsets v_env) @
           [Jal v] @
           (fun_epilogue v_env)
 ;;
@@ -275,8 +278,8 @@ let compile (p : Ast.program) : result =
   in
     let _ = reset() in
     let _ = init_fun_envs p in
-    let _ = funenv_table_print funenv_table in
-    let _ = print_string "------------------\n" in
+    (* let _ = funenv_table_print funenv_table in *)
+    (* let _ = print_string "------------------\n" in *)
     let inst = compile_prog p in 
       { code = inst; data = VarSet.elements (!variables) }
 ;;
