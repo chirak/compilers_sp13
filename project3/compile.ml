@@ -5,7 +5,6 @@ open Ast
 exception IMPLEMENT_ME;;
 exception BadProgram;;
 let error s = (print_string ("Error: "^ s); raise BadProgram);;
-
 let arg_regs : Mips.reg list = [R4;R5;R6;R7]
 
 let rec zip lst1 lst2 = 
@@ -24,7 +23,7 @@ type result = { code : Mips.inst list;
 type funenv = (string * int) list;;
 
 let funenv_insert (var : string) (env : funenv) : funenv =
-  let offset = List.length env + 3 in
+  let offset = List.length env in
     (var, offset) :: env
 ;;
   
@@ -160,8 +159,7 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
   in
 
   let store_args (exps : exp list) : (inst list * Mips.reg list) =
-    let regs : Mips.reg list = [R4;R5;R6;R7] in
-    let exp_regs = zip regs exps in
+    let exp_regs = zip arg_regs exps in
     let rec get_inst (arg : (Mips.reg * exp) list) : inst list =
       match arg with
           [] -> []
@@ -170,14 +168,38 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
               (compile_exp e frame) @ [Mips.Add(r, R2, Immed Word32.zero)]
               @ get_inst tl
     in
-
-    let rec get_arg_regs (len : int) (accum : Mips.reg list) : Mips.reg list =
-      if len = 0 then accum else get_arg_regs (len - 1) ((List.hd arg_regs) :: accum)
+    let rec get_arg_regs (len : int) (a_regs : Mips.reg list) : Mips.reg list =
+      if len <= 0 then
+        []
+      else 
+        (List.hd a_regs) :: (get_arg_regs (len - 1) (List.tl a_regs))
     in
 
     let i = get_inst exp_regs in
-    let arg_regs = List.rev (get_arg_regs (List.length i) []) in
-      (i, arg_regs)
+    let a_regs = get_arg_regs (List.length exp_regs) arg_regs in
+      (i, a_regs)
+  in
+
+  let store_extra_args (exps : exp list) (env : funenv) : inst list =
+    let extra_arg_len = (List.length exps) - 4 in
+    let init_offset = 12 in
+    let rec get_extra_exps (e : exp list) (len : int) : exp list =
+      if len <= 0 then
+        []
+      else
+        (List.hd e) :: get_extra_exps (List.tl e) (len - 1)
+    in
+    let rec get_extra_inst (ex : exp list) (i : int) : inst list =
+      match ex with
+          [] -> []
+        | hd :: tl ->
+            let offset = Int32.of_int(init_offset + (i*4)) in
+              (compile_exp (List.hd ex) env) @ [Mips.Sw(R2, R29, offset)] @
+              get_extra_inst (List.tl ex) (i+1)
+    in
+    let extra_exps = get_extra_exps (List.rev exps) extra_arg_len in
+    let extra_inst = get_extra_inst (List.rev extra_exps) 1 in
+      extra_inst
   in
 
   let e, pos = i in
@@ -210,13 +232,21 @@ let rec compile_exp (i : exp) (frame : funenv) : inst list =
         let offset = funenv_lookup x frame in
           (compile_exp e frame) @ [Sw(R2,R29,offset)]
     | Call(v, exps) -> 
-        let v_env = Hashtbl.find funenv_table v in
-        let store_inst, regs = store_args exps in
-        let reg_offsets = zip regs (funenv_offsets v_env) in
-          store_inst @
-          (fun_prologue reg_offsets v_env) @
-          [Jal v] @
-          (fun_epilogue v_env)
+        if not (Hashtbl.mem funenv_table v) then
+          error ("Function "^v^" is not defined")
+        else 
+          let v_env = Hashtbl.find funenv_table v in
+            if (List.length exps) <> (List.length v_env) then
+              error ("Incorrect # of args for function "^v)
+            else
+              let store_inst, regs = store_args exps in
+              let extra_store_inst = store_extra_args exps frame in
+              let reg_offsets = zip regs (funenv_offsets v_env) in
+                store_inst @
+                (fun_prologue reg_offsets v_env) @
+                extra_store_inst @
+                [Jal v] @
+                (fun_epilogue v_env)
 ;;
 
 (* compiles a Fish statement down to a list of MIPS instructions.
