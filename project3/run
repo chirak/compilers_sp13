@@ -1,0 +1,31 @@
+#!/bin/bash
+ 
+COMPILE_ERRORS=0
+ 
+function compile {
+  local filename="$(basename $1)"
+  local target="compiled/${filename%%.*}.s"
+  echo "$1 => $target" 
+  ./ps3 $1 > $target 2> compiled/errors.txt
+  if [ $? -ne 0 ] # if exit code was nonzero
+    then
+      COMPILE_ERRORS=1
+      echo "-----------------------"
+  fi
+}
+ 
+ 
+echo "Compiling tests ..."
+ 
+for f in test/*.cish
+do
+  compile $f
+done
+ 
+if [ $COMPILE_ERRORS -ne 0 ]
+  then
+  echo "One or more compilation errors occurred; see compiled/errors.txt"
+  exit 1
+fi
+ 
+echo "Running tests ..."

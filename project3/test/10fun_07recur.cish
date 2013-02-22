@@ -1,3 +1,4 @@
+/* returns 385 */
 f(x) {
   if (x > 0) {
     return x * x + f(x - 1);

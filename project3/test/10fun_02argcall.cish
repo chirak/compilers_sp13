@@ -1,3 +1,4 @@
+/* returns 385 */
 f(a) {
   return a * a;
 }
