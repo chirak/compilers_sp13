@@ -14,14 +14,14 @@ let parse_file () =
   Scish_parse.program Scish_lex.lexer (Lexing.from_channel ch)
 
 let compile_prog prog = Scish_compile.compile_exp prog
-
 let run_prog prog = Scish_eval.run prog
 
-let dump p = print_string (Cish_ast.prog2string p)
+let compile_dump p = print_string (Cish_ast.prog2string p)
+let eval_dump p = print_string (Scish_eval.val2string p)
 
 let _ =
   let prog = parse_file() in
 (*
 let _ =  print_string ("answer = "^(string_of_int ans)^"\n") in
 *)
-  dump (compile_prog prog)
+  compile_dump (compile_prog prog)
