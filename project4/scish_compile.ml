@@ -76,11 +76,11 @@ let compile_exp (e:Scish_ast.exp) : program =
              | (Scish_ast.Lt,[e1;e2])    -> compile_prim Lt e1 e2
              | (Scish_ast.Cons,[hd;tl])  -> compile_cons hd tl
              | (Scish_ast.Fst,[e]) ->
-                 let s = compile' e var in (* this must be a cons, fst, or snd *)
+                 let s = compile' e var in 
                  let load = (Assign(var, (Load (Var(var), 0), 0)), 0) in
                    (Seq(s, (Exp load, 0)), 0)
              | (Scish_ast.Snd,[e]) ->
-                 let s = compile' e var in (* this must be a cons, fst, or snd *)
+                 let s = compile' e var in
                  let load = 
                    (Assign(var,
                            (Load (Binop((Var(var), 0),
