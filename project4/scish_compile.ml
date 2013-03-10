@@ -9,6 +9,32 @@ let var_counter = ref 0;;
 let new_int() = (var_counter := (!var_counter) + 1; !var_counter);;
 let new_var prefix = (prefix) ^ (string_of_int (new_int()));;
 
+type env = (string * int) list;;
+
+let rec in_env (v:string) (env:env) : bool =
+  match env with
+      [] -> false
+    | hd::tl -> 
+        let v', _ = hd in
+          v = v' || in_env v tl
+;;
+
+let rec s_lookup (v:string) (env:env) : int =
+  match env with
+      [] -> error (Printf.sprintf "Variable %s not found in env" v)
+    | hd::tl ->
+        let v', off = hd in
+          if v = v' then off else s_lookup v tl
+;;
+
+let rec c_lookup (i:int) (accum:exp) : exp =
+  if i <= 0 then
+    (Load accum, 0)
+  else
+    c_lookup (i-1) (Load (Binop(accum, Plus, (Int(4),0)), 0), 0)
+;;
+
+
 let compile_exp (e:Scish_ast.exp) : program = 
   let fun_env : funcsig list ref = ref [] in
 
@@ -25,7 +51,7 @@ let compile_exp (e:Scish_ast.exp) : program =
       (Var(name), 0)
   in
   
-  let rec compile' (expr:Scish_ast.exp) (var:string) (env:(string*int) list) : Cish_ast.stmt =
+  let rec compile' (expr:Scish_ast.exp) (var:string) (env:env) : Cish_ast.stmt =
     let _exp (e:exp) : stmt =
       (Exp e, 0)
     in
@@ -76,38 +102,15 @@ let compile_exp (e:Scish_ast.exp) : program =
         (v,offset)::env
     in
 
-    let rec in_env (v:string) (env:(string * int) list) : bool =
-      match env with
-          [] -> false
-        | hd::tl -> 
-            let v', _ = hd in
-              v = v' || in_env v tl
-    in
-
-    let rec s_lookup (v:string) (env: (string * int) list) =
-      match env with
-          [] -> error (Printf.sprintf "Variable %s not found in env" v)
-        | hd::tl ->
-            let v', off = hd in
-              if v = v' then off else s_lookup v tl
-    in
-
-    let rec c_lookup (i:int) (accum:exp) : exp =
-      if i <= 0 then
-        (Load accum, 0)
-      else
-        c_lookup (i-1) (Load (Binop(accum, Plus, (Int(4),0)), 0), 0)
-    in
-
     match expr with
         Scish_ast.Int(i) -> _exp (_assign var (_int i))
       | Scish_ast.Var(v) ->
           if in_env v env then
             let off = (List.length env) - (s_lookup v env) in
             let load = c_lookup off (Var "dynenv", 0) in
-              (Exp (Assign (var, load), 0), 0)
+              _exp (_assign var load)
           else
-            (Exp (Assign (var, (Var(v), 0)), 0), 0)
+            _exp (_assign var (_var v))
       | Scish_ast.PrimApp(op, exprs) ->
           (match (op, exprs) with
                (Scish_ast.Plus,[e1;e2])  -> compile_prim Plus e1 e2
