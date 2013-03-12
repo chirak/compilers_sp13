@@ -1,5 +1,5 @@
 (* Abstract syntax and pretty-printer for the Scheme-ish language Scish *)
-type var = string
+type var = string;;
 
 type primop = 
   Plus   (* add two ints *)
@@ -11,6 +11,7 @@ type primop =
 | Snd    (* fetch the 2nd component of a pair *)
 | Eq     (* compare two ints for equality *)
 | Lt     (* compare two ints for inequality *)
+;;
 
 type exp = 
   Int of int                    (* integer constants *)
@@ -19,6 +20,12 @@ type exp =
 | Lambda of var * exp           (* an anonymous function *)
 | App of exp * exp              (* call a function *)
 | If of exp * exp * exp         (* if e1 != 0 then e2 else e3 *)
+;;
+
+type union =
+  Prim of primop
+| Exp of exp
+;;
 
 (* some derived forms *)
 let sLet (x:var) (e1:exp) (e2:exp) : exp = App(Lambda(x,e2),e1)          
