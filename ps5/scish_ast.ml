@@ -51,7 +51,7 @@ let rec exp2string (e:exp):string =
   | PrimApp(p,es) -> 
       "(" ^ (primop2string p) ^ " " ^ (exps2string es) ^")"
   | Var x -> x
-  | Lambda(x,e) -> "(lambda ("^x^") ("^(exp2string e)^"))"
+  | Lambda(x,e) -> "(lambda ("^x^") "^(exp2string e)^")"
   | App(e1,e2) -> "(" ^ (exps2string [e1;e2]) ^ ")"
   | If(e1,e2,e3) -> "(if "^(exps2string[e1;e2;e3]) ^ ")"
 
