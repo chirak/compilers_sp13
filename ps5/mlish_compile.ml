@@ -2,6 +2,28 @@ module ML = Mlish_ast;;
 module S = Scish_ast;;
 
 exception Unimplemented;;
+exception Error;;
+exception EnvLookup
+let error s = (print_string s; print_string "\n"; raise Error);;
+
+let var_counter = ref 0;;
+let new_int() = (var_counter := (!var_counter) + 1; !var_counter);;
+let new_var() = "t" ^ (string_of_int (new_int()));;
+
+type env = (string*S.exp) list;;
+
+let rec in_env (v:string) (env:env) : bool =
+  match env with
+      [] -> false
+    | hd::tl -> let v',e = hd in v = v' || in_env v tl
+;;
+let rec lookup (v:string) (env:env) =
+  match env with
+      [] -> error (Printf.sprintf "Variable %s not found in env" v)
+    | hd::tl ->
+        let v',e = hd in
+          if v = v' then e else lookup v tl
+;;
 
 let compile_prim (prim:ML.prim) : S.union =
   match prim with
@@ -27,22 +49,25 @@ let compile_prim (prim:ML.prim) : S.union =
     | ML.Tl -> S.Prim(S.Snd)
 ;;
 
-let rec compile_exp ((e,_):ML.exp) : S.exp =
-  match e with
-      ML.Var(v) -> S.Var(v)
-    | ML.PrimApp(p, exps) ->
-        let p' = compile_prim p in
-        let exps'' = List.map compile_exp exps in
-          (match p' with
-               S.Prim(op) -> S.PrimApp(op, exps'')
-             | S.Exp(e)   -> e)
-    | ML.Fn(v, exp) ->
-        S.Lambda(v, compile_exp exp)
-    | ML.App(e1, e2) -> 
-        S.App(compile_exp e1, compile_exp e2)
-    | ML.If(test, e1, e2) -> 
-        S.If(compile_exp test, compile_exp e1, compile_exp e2)
-    | ML.Let(v, e1, e2) ->
-        let l = S.Lambda(v, compile_exp e1) in
-          S.App(l, compile_exp e2)
+let rec compile_exp (expr:ML.exp) : S.exp =
+  let rec compile' ((e,_):ML.exp) (env:env) : S.exp =
+    match e with
+        ML.Var(v) -> if in_env v env then lookup v env else S.Var(v)
+      | ML.PrimApp(p, exps) ->
+          let p' = compile_prim p in
+          let exps'' = List.map (fun ex -> compile' ex env) exps in
+            (match p' with
+                 S.Prim(op) -> S.PrimApp(op, exps'')
+               | S.Exp(e)   -> e)
+      | ML.Fn(v, exp) ->
+          S.Lambda(v, compile' exp env)
+      | ML.App(e1, e2) -> 
+          S.App(compile' e1 env, compile' e2 env)
+      | ML.If(test, e1, e2) -> 
+          S.If(compile' test env, compile' e1 env, compile' e2 env)
+      | ML.Let(v, e1, e2) ->
+          let value = compile' e1 env in
+            compile' e2 ((v,value)::env)
+  in
+    compile' expr []
 ;;
