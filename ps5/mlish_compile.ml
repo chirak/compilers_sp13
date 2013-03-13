@@ -12,14 +12,9 @@ let new_var() = "t" ^ (string_of_int (new_int()));;
 
 type env = (string*S.exp) list;;
 
-let rec in_env (v:string) (env:env) : bool =
-  match env with
-      [] -> false
-    | hd::tl -> let v',e = hd in v = v' || in_env v tl
-;;
 let rec lookup (v:string) (env:env) =
   match env with
-      [] -> error (Printf.sprintf "Variable %s not found in env" v)
+      [] -> raise EnvLookup
     | hd::tl ->
         let v',e = hd in
           if v = v' then e else lookup v tl
@@ -42,9 +37,9 @@ let compile_prim (prim:ML.prim) : S.union =
     | ML.Pair -> S.Prim(S.Cons)
     | ML.Fst -> S.Prim(S.Fst)
     | ML.Snd -> S.Prim(S.Snd)
-    | ML.Nil -> raise Unimplemented
+    | ML.Nil -> S.Exp(S.Int(0))
     | ML.Cons -> S.Prim(S.Cons)
-    | ML.IsNil -> raise Unimplemented
+    | ML.IsNil -> S.Exp(S.Lambda("x", S.PrimApp(S.Eq, [S.Int(0);S.Var("x")])))
     | ML.Hd -> S.Prim(S.Fst)
     | ML.Tl -> S.Prim(S.Snd)
 ;;
@@ -52,12 +47,13 @@ let compile_prim (prim:ML.prim) : S.union =
 let rec compile_exp (expr:ML.exp) : S.exp =
   let rec compile' ((e,_):ML.exp) (env:env) : S.exp =
     match e with
-        ML.Var(v) -> if in_env v env then lookup v env else S.Var(v)
+        ML.Var(v) -> 
+          (try (lookup v env) with EnvLookup -> S.Var(v))
       | ML.PrimApp(p, exps) ->
           let p' = compile_prim p in
-          let exps'' = List.map (fun ex -> compile' ex env) exps in
+          let exps' = List.map (fun ex -> compile' ex env) exps in
             (match p' with
-                 S.Prim(op) -> S.PrimApp(op, exps'')
+                 S.Prim(op) -> S.PrimApp(op, exps')
                | S.Exp(e)   -> e)
       | ML.Fn(v, exp) ->
           S.Lambda(v, compile' exp env)

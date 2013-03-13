@@ -13,7 +13,7 @@ let parse_file () =
   Ml_parse.program Ml_lex.lexer (Lexing.from_channel ch)
 
 let compile_prog prog = 
-  (* let _ = Mlish_type_check.type_check_exp prog in *)
+  let _ = Mlish_type_check.type_check_exp prog in
   Mlish_compile.compile_exp prog
 
 let run_prog prog = Scish_eval.run prog
