@@ -78,9 +78,13 @@ let type_check_exp (e:exp) : tipe =
     let guesses_of (Forall (_, t)) = guesses_of_tipe empty t in
 
     let type_guesses = guesses_of_tipe empty t in
-    let env_guesses = List.fold_left Var_set.union empty (List.map (fun (x,s) -> guesses_of s) e) in
+    let env_guesses = List.fold_left Var_set.union empty
+                        (List.map (fun (x,s) -> guesses_of s) e) 
+    in
     let frame_vars = Var_set.diff type_guesses env_guesses in
-    let gs_vs = List.map (fun g -> (new_var(), g)) (Var_set.elements frame_vars) in
+    let gs_vs = 
+      List.map (fun g -> (new_var(), g)) (Var_set.elements frame_vars)
+    in
     let t' = substitute gs_vs t in
       Forall(List.map (function (v, _) -> v) gs_vs, t')
   in
@@ -104,11 +108,25 @@ let type_check_exp (e:exp) : tipe =
         (match exprs with
              [] -> Unit_t
            | _ -> raise TypeError)
-      | Plus | Minus | Times | Div | Lt | Eq ->
+      | Plus | Minus | Times | Div ->
           (match exprs with
                [i1;i2] ->
                  (match type_check' i1 env, type_check' i2 env with
                       Int_t, Int_t -> Int_t
+                    | _ -> raise TypeError)
+             | _ -> raise TypeError)
+      | Lt ->
+          (match exprs with
+               [i1;i2] ->
+                 (match type_check' i1 env, type_check' i2 env with
+                      Int_t, Int_t -> Bool_t
+                    | _ -> raise TypeError)
+             | _ -> raise TypeError)
+      | Eq ->
+          (match exprs with
+               [i1;i2] ->
+                 (match type_check' i1 env, type_check' i2 env with
+                      t1, t2 when t1 = t2 -> t1
                     | _ -> raise TypeError)
              | _ -> raise TypeError)
       | Pair ->
