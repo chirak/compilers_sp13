@@ -42,9 +42,13 @@ let type_check_exp (e:exp) : tipe =
         | Guess_t (({contents = None}) as r), _ ->
             (r.contents <- Some(t2); true) 
         | _, Guess_t(_) -> unify t2 t1 
-        | Fn_t(t1a,t1b), Fn_t(t2a,t2b) -> 
+        | Fn_t(t1a,t1b), Fn_t(t2a,t2b) | Pair_t(t1a, t1b), Pair_t(t2a, t2b) -> 
             unify t1a t2a && unify t1b t2b
-        | _ -> raise TypeError
+        | List_t(a), List_t(b) -> unify a b
+        | Tvar_t(a), Tvar_t(b) -> a = b
+        | _ -> 
+          print_string "Unify Failed";
+          raise TypeError
   in
 
   let var_counter = ref 0 in
@@ -136,20 +140,37 @@ let type_check_exp (e:exp) : tipe =
                [x1;x2] -> Pair_t(type_check' x1 env,type_check' x2 env)
              | _ -> raise TypeError)
       | Fst ->
+          let rec unnest_guess = function
+            | Guess_t(t) -> 
+              (match !t with
+                | Some t -> unnest_guess t
+                | None -> 
+                    let t_fst = guess() in
+                    t := Some(Pair_t(t_fst, guess()));
+                    t_fst)
+            | Pair_t(t, _) -> t
+          in
           (match exprs with
-               [x] ->
-                 (match type_check' x env with
-                      Pair_t(t,_) -> t
-                    | _ -> raise TypeError)
+               [x] -> unnest_guess (type_check' x env)
              | _ -> raise TypeError)
       | Snd ->
+          let rec unnest_guess = function
+            | Guess_t(t) -> 
+              (match !t with
+                | Some t -> unnest_guess t
+                | None -> 
+                    let t_snd = guess() in
+                    t := Some(Pair_t(guess(), t_snd));
+                    t_snd)
+            | Pair_t(_, t) -> t
+          in
           (match exprs with
-               [x] ->
-                 (match type_check' x env with
-                      Pair_t(_,t) -> t
-                    | _ -> raise TypeError)
+               [x] -> unnest_guess (type_check' x env)
              | _ -> raise TypeError)
-      | Nil -> guess()
+      | Nil -> 
+          (match exprs with
+                [] -> guess()
+              | _ -> raise TypeError)
       | Cons ->
           (match exprs with
                [hd;tl] ->
@@ -159,25 +180,47 @@ let type_check_exp (e:exp) : tipe =
                       | _ -> raise TypeError)
              | _ -> raise TypeError)
       | IsNil ->
+          let rec unnest_guess = function
+            | Guess_t(t) -> 
+              (match !t with
+                | Some t -> unnest_guess t
+                | None -> 
+                    t := Some(List_t(guess()));
+                    Bool_t)
+            | List_t(_) -> Bool_t
+          in
           (match exprs with
-               [l] ->
-                 (match type_check' l env with
-                      List_t _ -> Bool_t
-                    | _ -> raise TypeError)
+               [l] -> unnest_guess (type_check' l env)
              | _ -> raise TypeError)
       | Hd ->
+          let rec unnest_guess = function
+            | Guess_t(t) -> 
+              (match !t with
+                | Some t -> unnest_guess t
+                | None -> 
+                    let t' = guess() in
+                    t := Some(List_t(t'));
+                    t')
+            | List_t(t) -> t
+          in
           (match exprs with
                [l] ->
-                 (match type_check' l env with
-                      List_t t -> t
-                    | _ -> raise TypeError)
+                 unnest_guess (type_check' l env)
              | _ -> raise TypeError)
       | Tl ->
+          let rec unnest_guess = function
+            | Guess_t(t) -> 
+              (match !t with
+                | Some t -> unnest_guess t
+                | None -> 
+                    let t' = List_t(guess()) in
+                    t := Some(t');
+                    t')
+            | List_t(t) as lit -> lit
+          in
           (match exprs with
                [l] ->
-                 (match type_check' l env with
-                      List_t _ as t -> t
-                    | _ -> raise TypeError)
+                 unnest_guess (type_check' l env)
              | _ -> raise TypeError)
       | _ -> raise TypeError
 
@@ -199,7 +242,11 @@ let type_check_exp (e:exp) : tipe =
             Fn_t(t, body_type)
       | App(e1, e2) -> 
           print_string "MATCHING APP\n";
-          let (t1,t2,t) = (type_check' e1 env, type_check' e2 env, guess()) in
+          print_string "checking e1";
+          let t1 = type_check' e1 env in
+          print_string "checking e2";
+          let t2 = type_check' e2 env in
+          let t = guess() in
           let _ = Printf.printf "Fun Type: %s\n" (tipe2string t1) in
           let _ = Printf.printf "Arg Type: %s\n" (tipe2string t2) in
             if unify t1 (Fn_t(t2, t)) then
