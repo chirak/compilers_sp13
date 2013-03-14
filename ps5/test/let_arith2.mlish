@@ -1,4 +1,4 @@
-let x = 20 in
-let y = 10 in
+let x = 5 in
+let y = 10 + x in
 let z = 5 in
   (x + y) / z

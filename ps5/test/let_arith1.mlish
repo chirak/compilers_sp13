@@ -1,2 +1,2 @@
-let x = 10 in
+let x = false in
   x + 5
