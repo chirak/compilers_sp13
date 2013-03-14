@@ -57,3 +57,11 @@ let rec tipe2string (t:tipe) : string =
     | Guess_t({contents = (Some t)}) -> Printf.sprintf "Guess_t(%s)" (tipe2string t)
     | Guess_t({contents = None}) -> "Guess_t(None)"
 ;;
+
+let ts2string (ts:tipe_scheme) : string =
+  match ts with
+      Forall(l,t) ->
+        let t_str = tipe2string t in
+        let l_str = String.concat ", " l in
+          Printf.sprintf "%s : %s" t_str l_str
+;;

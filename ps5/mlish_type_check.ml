@@ -39,7 +39,8 @@ let type_check_exp (e:exp) : tipe =
     if (t1 = t2) then true else 
       match t1,t2 with 
           Guess_t({contents = (Some t1')}), _ -> unify t1' t2 
-        | Guess_t (({contents = None}) as r), t2 ->  (r.contents <- Some(t2); true) 
+        | Guess_t (({contents = None}) as r), _ ->
+            (r.contents <- Some(t2); true) 
         | _, Guess_t(_) -> unify t2 t1 
         | Fn_t(t1a,t1b), Fn_t(t2a,t2b) -> 
             unify t1a t2a && unify t1b t2b
@@ -111,6 +112,7 @@ let type_check_exp (e:exp) : tipe =
       | Plus | Minus | Times | Div ->
           (match exprs with
                [i1;i2] ->
+                 let _ = print_string "HERE\n" in
                  (match type_check' i1 env, type_check' i2 env with
                       Int_t, Int_t -> Int_t
                     | _ -> raise TypeError)
@@ -137,17 +139,17 @@ let type_check_exp (e:exp) : tipe =
           (match exprs with
                [x] ->
                  (match type_check' x env with
-                      Pair_t(x,_) -> x
+                      Pair_t(t,_) -> t
                     | _ -> raise TypeError)
              | _ -> raise TypeError)
       | Snd ->
           (match exprs with
                [x] ->
                  (match type_check' x env with
-                      Pair_t(_,x) -> x
+                      Pair_t(_,t) -> t
                     | _ -> raise TypeError)
              | _ -> raise TypeError)
-      (* | Nil -> S.Exp(S.Int(0)) *)
+      | Nil -> guess()
       | Cons ->
           (match exprs with
                [hd;tl] ->
@@ -181,15 +183,31 @@ let type_check_exp (e:exp) : tipe =
 
   and type_check' ((e,_):exp) (env:env) : tipe =
     match e with
-        Var(v) -> instantiate(lookup v env)
-      | PrimApp(p, exps) -> type_check_prim p exps env
+        Var(v) ->
+          print_string "MATCHING VAR\n";
+          (* let env_str = List.map (fun (n,t) -> n^" "^(ts2string t)) env in *)
+          (* let l_str = String.concat ", " env_str in *)
+          (* let _ = Printf.printf "%s\n" l_str in *)
+          instantiate(lookup v env)
+      | PrimApp(p, exps) ->
+          print_string "MATCHING PRIMAPP\n";
+          type_check_prim p exps env
       | Fn(v, exp) ->
+          print_string "MATCHING FUNCTION\n";
           let t = guess() in
-            Fn_t(t, type_check' exp  ((v, Forall([], t))::env))
+          let body_type = type_check' exp ((v, Forall([], t))::env) in
+            Fn_t(t, body_type)
       | App(e1, e2) -> 
+          print_string "MATCHING APP\n";
           let (t1,t2,t) = (type_check' e1 env, type_check' e2 env, guess()) in
-            if unify t1 (Fn_t(t2, t)) then t else raise TypeError
+          let _ = Printf.printf "Fun Type: %s\n" (tipe2string t1) in
+          let _ = Printf.printf "Arg Type: %s\n" (tipe2string t2) in
+            if unify t1 (Fn_t(t2, t)) then
+              let _ = Printf.printf "Unified Type: %s\n" (tipe2string t) in
+                t 
+            else raise TypeError
       | If(test, e1, e2) ->
+          print_string "matching IF\n";
           (match type_check' test env with
                Bool_t ->
                  (match type_check' e1 env, type_check' e2 env with
@@ -197,7 +215,9 @@ let type_check_exp (e:exp) : tipe =
                     | _ -> raise TypeError)
              | _ -> raise TypeError)
       | Let(v, e1, e2) ->
+          print_string "matching LET\n";
           let s = generalize(env, type_check' e1 env) in
+          let _ = Printf.printf "%s\n" (ts2string s) in
             type_check' e2 ((v,s)::env)
   in
     type_check' e []
