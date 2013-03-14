@@ -11,8 +11,9 @@ type tipe =
 | Pair_t of tipe * tipe
 | List_t of tipe
 | Guess_t of tipe option ref
+;;
 
-type tipe_scheme = Forall of (tvar list) * tipe
+type tipe_scheme = Forall of (tvar list) * tipe;;
 
 type prim = 
   Int of int
@@ -32,6 +33,7 @@ type prim =
 | IsNil  (* determine whether a list is Nil *)
 | Hd     (* fetch the head of a list *)
 | Tl     (* fetch the tail of a list *)
+;;
 
 type rexp = 
   Var of var
@@ -41,3 +43,17 @@ type rexp =
 | If of exp * exp * exp
 | Let of var * exp * exp
 and exp = rexp * pos
+;;
+
+let rec tipe2string (t:tipe) : string =
+  match t with
+      Tvar_t(tvar) -> Printf.sprintf "Tvar_t(%s)" tvar
+    | Int_t -> "Int_t"
+    | Bool_t -> "Bool_t"
+    | Unit_t -> "Unit_t"
+    | Fn_t(t1,t2) -> Printf.sprintf "Fn_t(%s,%s)" (tipe2string t1) (tipe2string t2)
+    | Pair_t(t1,t2)-> Printf.sprintf "Pair_t(%s,%s)" (tipe2string t1) (tipe2string t2)
+    | List_t(t) -> Printf.sprintf "List_t(%s)" (tipe2string t)
+    | Guess_t({contents = (Some t)}) -> Printf.sprintf "Guess_t(%s)" (tipe2string t)
+    | Guess_t({contents = None}) -> "Guess_t(None)"
+;;
