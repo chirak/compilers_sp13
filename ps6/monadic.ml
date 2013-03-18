@@ -7,20 +7,20 @@ exception TODO
 exception EXTRA_CREDIT
 
 (* operands -- pure and small *)
-type operand = Var of var | Int of int
+type operand = Var of var | Int of int;;
 
 (* values -- pure, but possibly large *)
 type value = 
   Op of operand
 | PrimApp of S.primop * (operand list)
 | Lambda of var * exp
-
 (* expressions -- possibly impure, control flow *)
 and exp = 
   Return of operand
 | LetVal of var * value * exp
 | LetCall of var * operand * operand * exp
 | LetIf of var * operand * exp * exp * exp
+;;
 
 (* convert a monadic expression to a string *)
 let exp2string (e:exp) : string = 
@@ -45,19 +45,21 @@ let exp2string (e:exp) : string =
         | LetVal(x,Lambda(y,e1),e2) -> 
             tab^"fun "^x^"("^y^") =\n"^(e2s (tab^"     ") e1)^(e2s tab e2) in
     e2s "" e
+;;
 
 (* used to generate fresh variables *)
-let counter = ref 0
+let counter = ref 0;;
 let fresh_var() = 
     let c = !counter in
     counter := c+1; "x"^(string_of_int c)
+;;
 
 (* naive var->var environments *)
-exception UnboundVariable of string
+exception UnboundVariable of string;;
 let empty_env (x:var):var = (print_string ("unbound variable "^x); 
-                             raise (UnboundVariable x))
+                             raise (UnboundVariable x));;
 let extend (env:var->var) (x:var) (y:var) =
-    fun z -> if z = x then y else env z
+    fun z -> if z = x then y else env z;;
 
 (* convert an expression e to monadic form:
  *   env is used to rename variables on the fly so they are unique.
@@ -138,16 +140,17 @@ and toms (es : S.exp list) (accum: operand list)
     match es with
       [] -> k(List.rev accum)
     | e::rest -> tom e env (fun w -> toms rest (w::accum) env k)
+;;
 
-let tomonadic (e:S.exp) : exp = tom e empty_env (fun x -> Return x)
+let tomonadic (e:S.exp) : exp = tom e empty_env (fun x -> Return x);;
 
 (* a flag used to track when an optimization makes a reduction *)
-let changed : bool ref = ref true
-let change x = (changed := true; x)
+let changed : bool ref = ref true;;
+let change x = (changed := true; x);;
 
 (* naive 'a -> 'b option environments *)
-let empty_env x = None
-let extend env x w = fun y -> if y = x then Some w else env y
+let empty_env x = None;;
+let extend env x w = fun y -> if y = x then Some w else env y;;
 
 (* operand propagation -- LetVal(x,Op w,e) --> e[w/x] -- just like notes. *)
 let rec cprop_exp (env : var -> operand option) (e:exp) = 
@@ -168,16 +171,45 @@ and cprop_oper (env : var -> operand option) (w:operand) =
     match w with
       Var x -> (match env x with None -> w | Some w' -> w')
     | Int _ -> w
+;;
 
-let cprop e = cprop_exp empty_env e
+let cprop e = cprop_exp empty_env e;;
 
 (* common sub-value elimination -- as in the slides *)
-let cse (e : exp) : exp = raise TODO 
+let cse (e : exp) : exp = raise TODO;;
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
  *)
-let cfold (e : exp) : exp = raise TODO
+let rec cfold (e : exp) : exp =
+  match e with
+    | Return w -> Return w
+    | LetVal(x,v,e) ->
+        LetVal(x, cfold_val v, cfold e)
+    | LetCall(x,f,ws,e) ->
+        LetCall(x,f,ws,cfold e)
+    | LetIf(x,Int 1,e1,e2,e) ->
+        cfold (flatten x e1 e)
+    | LetIf(x,Int 0,e1,e2,e) ->
+        cfold (flatten x e1 e)
+    | LetIf(x,w,e1,e2,e) ->
+        LetIf(x,w,cfold e1, cfold e2, cfold e)
+
+and flatten (x:var) (e1:exp) (e2:exp) : exp =
+  match e1 with
+    | Return w -> LetVal(x,Op w,e2)
+    | LetVal(y,v,e1) ->
+        LetVal(y,v,flatten x e1 e2)
+    | LetCall(y,f,ws,e1) ->
+        LetCall(y,f,ws,flatten x e1 e2)
+    | LetIf(y,w,et,ef,ec) ->
+        LetIf(y,w,et,ef,flatten x ec e2)
+
+and cfold_val (v:value) : value =
+  match v with
+    | Lambda(x,e) -> Lambda(x, cfold e)
+    | _ -> raise TODO (*need to fill in more cases *)
+;;
 
 
 (* To support a somewhat more efficient form of dead-code elimination and
@@ -190,18 +222,18 @@ let cfold (e : exp) : exp = raise TODO
  *)
 (* type cnt_table = (var,{uses:int ref,calls:int ref}) Hashtbl.hash_table *)
 type entry = { uses : int ref; calls: int ref }
-exception NotFound
+exception NotFound;;
 let new_cnt_table() = 
-    Hashtbl.create 101
+    Hashtbl.create 101;;
 let def (t) (x:var) = 
-    Hashtbl.add t x {uses=ref 0;calls=ref 0}
-let inc r = (r := !r + 1)
+    Hashtbl.add t x {uses=ref 0;calls=ref 0};;
+let inc r = (r := !r + 1);;
 let use (t) (x:var) = 
-    inc ((Hashtbl.find t x).uses)
+    inc ((Hashtbl.find t x).uses);;
 let call (t) (x:var) = 
-    inc ((Hashtbl.find t x).calls)
-let get_uses (t) (x:var) : int = !((Hashtbl.find t x).uses)
-let get_calls (t) (x:var) : int = !((Hashtbl.find t x).calls)
+    inc ((Hashtbl.find t x).calls);;
+let get_uses (t) (x:var) : int = !((Hashtbl.find t x).uses);;
+let get_calls (t) (x:var) : int = !((Hashtbl.find t x).calls);;
 
 let count_table (e:exp) = 
     let table = new_cnt_table() in
@@ -229,9 +261,10 @@ let count_table (e:exp) =
         Var x -> use x
       | Int _ -> () in
     occ_e e; table
+;;
 
 (* dead code elimination *)
-let dce (e:exp) : exp = raise TODO 
+let dce (e:exp) : exp = raise TODO ;;
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
@@ -273,19 +306,20 @@ let splice x e1 e2 =
           Lambda(y',splice_exp false (extend env y (Var y')) e)
       | PrimApp(p,ws) -> PrimApp(p,List.map (cprop_oper env) ws) in
   splice_exp true empty_env e1
+;;
 
-let always_inline_thresh (e : exp) : bool = true  (** Always inline **)
-let never_inline_thresh  (e : exp) : bool = false (** Never inline  **)
+let always_inline_thresh (e : exp) : bool = true;;  (** Always inline **)
+let never_inline_thresh  (e : exp) : bool = false;;(** Never inline  **)
 
 (* return true if the expression e is smaller than i, i.e. it has fewer
  * constructors
  *)
-let size_inline_thresh (i : int) (e : exp) : bool = raise TODO 
+let size_inline_thresh (i : int) (e : exp) : bool = raise TODO;;
 
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
  *)
-let inline (inline_threshold: exp -> bool) (e:exp) : exp = raise TODO 
+let inline (inline_threshold: exp -> bool) (e:exp) : exp = raise TODO;;
 
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
@@ -311,4 +345,5 @@ let optimize inline_threshold e =
       else e) in
     changed := true;
     loop 1 e
+;;
 
