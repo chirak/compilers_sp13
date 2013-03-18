@@ -1,0 +1,1 @@
+(((fun f -> ((fun x -> x x) (fun x -> f (fun v -> (x x) v)))) (fun fact -> (fun n -> if n < 2 then 1 else (fact (n - 1))))) 5)
