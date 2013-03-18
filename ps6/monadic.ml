@@ -176,7 +176,25 @@ and cprop_oper (env : var -> operand option) (w:operand) =
 let cprop e = cprop_exp empty_env e;;
 
 (* common sub-value elimination -- as in the slides *)
-let cse (e : exp) : exp = raise TODO;;
+(* need to implement environment from value -> var option *)
+let rec cse_exp(env:value->var option)(e:exp):exp =
+  match e with
+    | Return w -> Return w
+    | LetVal(x,v,e) ->
+        (match env v with
+           | None -> LetVal(x,cse_val env v,
+                              cse_exp (extend env v x) e)
+           | Some y -> LetVal(x,Op(Var y),cse_exp env e))
+    | LetCall(x,f,w,e) -> LetCall(x,f,w,cse_exp env e)
+    | LetIf(x,w,e1,e2,e) -> 
+        LetIf(x,w,cse_exp env e1,cse_exp env e2,
+              cse_exp env e)
+and cse_val env v = 
+  match v with | Lambda(x,e) ->  Lambda(x,cse_exp env e)
+    | v -> v
+;;
+
+let cse (e : exp) : exp = cse_exp empty_env e;;
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
