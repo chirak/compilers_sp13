@@ -190,11 +190,23 @@ let rec cse_exp(env:value->var option)(e:exp):exp =
         LetIf(x,w,cse_exp env e1,cse_exp env e2,
               cse_exp env e)
 and cse_val env v = 
-  match v with | Lambda(x,e) ->  Lambda(x,cse_exp env e)
+  match v with
+    | Lambda(x,e) -> Lambda(x,cse_exp env e)
     | v -> v
 ;;
 
 let cse (e : exp) : exp = cse_exp empty_env e;;
+
+let rec  flatten (x:var) (e1:exp) (e2:exp) : exp =
+  match e1 with
+    | Return w -> LetVal(x,Op w,e2)
+    | LetVal(y,v,e1) ->
+        LetVal(y,v,flatten x e1 e2)
+    | LetCall(y,f,ws,e1) ->
+        LetCall(y,f,ws,flatten x e1 e2)
+    | LetIf(y,w,et,ef,ec) ->
+        LetIf(y,w,et,ef,flatten x ec e2)
+;;
 
 (* constant folding
  * Apply primitive operations which can be evaluated. e.g. fst (1,2) = 1
@@ -213,20 +225,30 @@ let rec cfold (e : exp) : exp =
     | LetIf(x,w,e1,e2,e) ->
         LetIf(x,w,cfold e1, cfold e2, cfold e)
 
-and flatten (x:var) (e1:exp) (e2:exp) : exp =
-  match e1 with
-    | Return w -> LetVal(x,Op w,e2)
-    | LetVal(y,v,e1) ->
-        LetVal(y,v,flatten x e1 e2)
-    | LetCall(y,f,ws,e1) ->
-        LetCall(y,f,ws,flatten x e1 e2)
-    | LetIf(y,w,et,ef,ec) ->
-        LetIf(y,w,et,ef,flatten x ec e2)
-
 and cfold_val (v:value) : value =
   match v with
     | Lambda(x,e) -> Lambda(x, cfold e)
-    | _ -> raise TODO (*need to fill in more cases *)
+    | PrimApp (S.Plus, [Int i;Int j]) -> Op(Int(i+j))
+    | PrimApp (S.Plus,[Int 0;e]) -> Op(e)
+    | PrimApp (S.Plus,[e;Int 0]) -> Op(e)
+    | PrimApp (S.Minus,[Int i;Int j]) -> Op(Int(i-j))
+    | PrimApp (S.Minus,[e;Int 0]) -> Op(e)
+    | PrimApp (S.Times, [Int i;Int j]) -> Op(Int(i*j))
+    | PrimApp (S.Times, [e;Int 0]) -> Op(Int(0))
+    | PrimApp (S.Times, [Int 0;e]) -> Op(Int(0))
+    | PrimApp (S.Times, [e;Int 2]) | PrimApp (S.Times, [Int 2;e]) ->
+        PrimApp(S.Plus, [e;e])
+    | PrimApp (S.Div, [Int 0;Int j]) -> Op(Int(0))
+    | PrimApp (S.Lt, [Int i; Int j]) -> Op(Int(bool2int (i<j)))
+    | PrimApp (S.Lt, [Var v1; Var v2]) when v1 = v2 -> Op(Int(0))
+    | PrimApp (S.Eq, [Int i; Int j]) -> Op(Int(bool2int(i=j)))
+    | PrimApp (S.Eq, [Var v1; Var v2]) when v1 = v2 -> Op(Int(1))
+    | PrimApp (S.Fst, [e1;e2]) -> Op(e1)
+    | PrimApp (S.Snd, [e1;e2]) -> Op(e2)
+    | v -> v
+
+and bool2int (b:bool) : int =
+  if b then 1 else 0
 ;;
 
 
@@ -282,7 +304,44 @@ let count_table (e:exp) =
 ;;
 
 (* dead code elimination *)
-let dce (e:exp) : exp = raise TODO ;;
+let rec dce (e:exp) : exp =
+  match e with
+    | Return w -> Return w
+    | LetVal(x,v,e) ->
+        if occurs_exp x e then LetVal(x,v,dce e) else dce e
+    |LetCall(x,f,w,e) -> LetCall(x,f,w, dce e)
+    | LetIf (x,w,e1,e2,e) -> LetIf(x,w,dce e1, dce e2, dce e)
+
+and occurs_operand x o : bool =
+  match o with
+    | Var w when x = w -> true
+    | _ -> false
+
+and occurs_value x v : bool =
+  match v with
+      Op w -> occurs_operand x w
+    | PrimApp (_, l) -> ormap l (fun a -> occurs_operand x a)
+    | Lambda (_,e) -> occurs_exp x e
+
+and occurs_exp x e : bool =
+  match e with
+    | Return w -> occurs_operand x w
+    | LetVal(_,_,e) -> occurs_exp x e
+    | LetCall(x,f,w,e) -> 
+        (occurs_operand x f) ||
+        (occurs_operand x w) ||
+        (occurs_exp x e)
+    | LetIf(x,w,e1,e2,e) ->
+        (occurs_operand x w) ||
+        (occurs_exp x e1) ||
+        (occurs_exp x e2) ||
+        (occurs_exp x e)
+
+and ormap l f =
+  match l with
+      [] -> false
+    | hd::tl -> f hd || ormap tl f
+;;
 
 (* (1) inline functions 
  * (2) reduce LetIf expressions when the value being tested is a constant.
@@ -338,7 +397,6 @@ let size_inline_thresh (i : int) (e : exp) : bool = raise TODO;;
  * only inline the expression e if (inline_threshold e) return true.
  *)
 let inline (inline_threshold: exp -> bool) (e:exp) : exp = raise TODO;;
-
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
  *   if (x < 1) then if (x < 2) then X else Y else Z =-> 
@@ -352,7 +410,8 @@ let redtest (e:exp) : exp = e (* raise EXTRA_CREDIT *)
 (* optimize the code by repeatedly performing optimization passes until
  * there is no change. *)
 let optimize inline_threshold e = 
-    let opt = fun x -> dce (cprop (redtest (cse (cfold ((inline inline_threshold) x))))) in
+    (* let opt = fun x -> dce (cprop (redtest (cse (cfold ((inline inline_threshold) x))))) in *)
+    let opt = fun x -> dce (cprop (redtest (cse (cfold x)))) in
     let rec loop (i:int) (e:exp) : exp = 
       (if (!changed) then 
         let _ = changed := false in
