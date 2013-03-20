@@ -197,7 +197,7 @@ and cse_val env v =
 
 let cse (e : exp) : exp = cse_exp empty_env e;;
 
-let rec  flatten (x:var) (e1:exp) (e2:exp) : exp =
+let rec flatten (x:var) (e1:exp) (e2:exp) : exp =
   match e1 with
     | Return w -> LetVal(x,Op w,e2)
     | LetVal(y,v,e1) ->
@@ -236,9 +236,12 @@ and cfold_val (v:value) : value =
     | PrimApp (S.Times, [Int i;Int j]) -> Op(Int(i*j))
     | PrimApp (S.Times, [e;Int 0]) -> Op(Int(0))
     | PrimApp (S.Times, [Int 0;e]) -> Op(Int(0))
+    | PrimApp (S.Times, [e;Int 1]) -> Op(e)
+    | PrimApp (S.Times, [Int 1;e]) -> Op(e)
     | PrimApp (S.Times, [e;Int 2]) | PrimApp (S.Times, [Int 2;e]) ->
         PrimApp(S.Plus, [e;e])
     | PrimApp (S.Div, [Int 0;Int j]) -> Op(Int(0))
+    | PrimApp (S.Div, [e; Int 1]) -> Op(e)
     | PrimApp (S.Lt, [Int i; Int j]) -> Op(Int(bool2int (i<j)))
     | PrimApp (S.Lt, [Var v1; Var v2]) when v1 = v2 -> Op(Int(0))
     | PrimApp (S.Eq, [Int i; Int j]) -> Op(Int(bool2int(i=j)))
@@ -391,12 +394,55 @@ let never_inline_thresh  (e : exp) : bool = false;;(** Never inline  **)
 (* return true if the expression e is smaller than i, i.e. it has fewer
  * constructors
  *)
-let size_inline_thresh (i : int) (e : exp) : bool = raise TODO;;
+let size_inline_thresh (i : int) (e : exp) : bool =
+  let rec exp_size (accum:int) (e:exp) =
+    match e with
+        Return _ -> accum
+      | LetVal(_,_,e) -> exp_size (accum + 1) e
+      | LetCall(_,_,_,e) ->  exp_size (accum + 1) e
+      | LetIf(_,_,e1,e2,e) ->
+          let max_size = max (exp_size accum e1) (exp_size accum e2) in
+            (exp_size (accum + max_size + 1) e)
+  in
+  let size = exp_size 0 e in
+    size < i
+;;
+let inline_thresh (e:exp) : bool = size_inline_thresh 3 e;;
 
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
  *)
-let inline (inline_threshold: exp -> bool) (e:exp) : exp = raise TODO;;
+let inline (thresh: exp -> bool) (e:exp) : exp =
+  let rec inline thresh (env:var->value option) e =
+    match e with
+        Return _ as r -> r
+      | LetVal(y,v,e1) ->
+          (match v with
+             | Lambda(arg, body) ->
+                 let i_body = inline thresh env body in
+                 let v' = Lambda(arg, i_body) in
+                 let env' = 
+                   if thresh i_body then 
+                     extend env y v'
+                   else
+                     env
+                 in
+                   LetVal(y,v', inline thresh env' e1)
+             | _ -> LetVal(y,v, inline thresh env e1))
+      | LetCall(y, ((Var name) as f), ws, e1) ->
+          (match env name with
+               None -> LetCall(y, f, ws, inline thresh env e1)
+             | Some(Lambda(arg, body)) ->
+                 let inner = LetVal(arg, Op ws, body) in
+                   flatten y inner e1
+             | _ -> raise TODO)
+      | LetIf(y,w,et,ef,ec) ->
+          LetIf(y,w, inline thresh env et, inline thresh env ef, inline thresh env ec)
+      | _ -> raise TODO
+  in
+    inline thresh empty_env e
+;;
+
 (* reduction of conditions
  * - Optimize conditionals based on contextual information, e.g.
  *   if (x < 1) then if (x < 2) then X else Y else Z =-> 
@@ -410,8 +456,7 @@ let redtest (e:exp) : exp = e (* raise EXTRA_CREDIT *)
 (* optimize the code by repeatedly performing optimization passes until
  * there is no change. *)
 let optimize inline_threshold e = 
-    (* let opt = fun x -> dce (cprop (redtest (cse (cfold ((inline inline_threshold) x))))) in *)
-    let opt = fun x -> dce (cprop (redtest (cse (cfold x)))) in
+    let opt = fun x -> dce (cprop (redtest (cse (cfold ((inline inline_threshold) x))))) in
     let rec loop (i:int) (e:exp) : exp = 
       (if (!changed) then 
         let _ = changed := false in
