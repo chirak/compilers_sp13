@@ -3,6 +3,7 @@
 module S = Scish_ast
 type var = string
 
+exception Error
 exception TODO
 exception EXTRA_CREDIT
 
@@ -404,10 +405,24 @@ let size_inline_thresh (i : int) (e : exp) : bool =
           let max_size = max (exp_size accum e1) (exp_size accum e2) in
             (exp_size (accum + max_size + 1) e)
   in
+  let rec is_prim (e:exp) =
+    let is_prim' (v:value) =
+      match v with
+          Op _ -> true
+        | PrimApp (_,_) -> true
+        | Lambda (_,_) -> false
+    in
+
+    match e with
+        Return _ -> true
+      | LetVal(_,v,e) -> is_prim' v && is_prim e
+      | LetCall(_,_,_,e) ->  is_prim e
+      | LetIf(_,_,e1,e2,e) -> is_prim e1 && is_prim e2 && is_prim e
+  in
+
   let size = exp_size 0 e in
-    size < i
+    (size < i) && is_prim e
 ;;
-let inline_thresh (e:exp) : bool = size_inline_thresh 3 e;;
 
 (* inlining 
  * only inline the expression e if (inline_threshold e) return true.
@@ -421,12 +436,7 @@ let inline (thresh: exp -> bool) (e:exp) : exp =
              | Lambda(arg, body) ->
                  let i_body = inline thresh env body in
                  let v' = Lambda(arg, i_body) in
-                 let env' = 
-                   if thresh i_body then 
-                     extend env y v'
-                   else
-                     env
-                 in
+                 let env' = if thresh i_body then extend env y v' else env in
                    LetVal(y,v', inline thresh env' e1)
              | _ -> LetVal(y,v, inline thresh env e1))
       | LetCall(y, ((Var name) as f), ws, e1) ->
@@ -435,10 +445,10 @@ let inline (thresh: exp -> bool) (e:exp) : exp =
              | Some(Lambda(arg, body)) ->
                  let inner = LetVal(arg, Op ws, body) in
                    flatten y inner e1
-             | _ -> raise TODO)
+             | _ -> raise Error)
       | LetIf(y,w,et,ef,ec) ->
           LetIf(y,w, inline thresh env et, inline thresh env ef, inline thresh env ec)
-      | _ -> raise TODO
+      | _ -> raise Error
   in
     inline thresh empty_env e
 ;;
@@ -456,7 +466,7 @@ let redtest (e:exp) : exp = e (* raise EXTRA_CREDIT *)
 (* optimize the code by repeatedly performing optimization passes until
  * there is no change. *)
 let optimize inline_threshold e = 
-    let opt = fun x -> dce (cprop (redtest (cse (cfold ((inline inline_threshold) x))))) in
+    let opt = fun x -> cprop (redtest (cse (cfold ((inline inline_threshold) x)))) in
     let rec loop (i:int) (e:exp) : exp = 
       (if (!changed) then 
         let _ = changed := false in
