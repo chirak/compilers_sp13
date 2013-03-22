@@ -405,23 +405,9 @@ let size_inline_thresh (i : int) (e : exp) : bool =
           let max_size = max (exp_size accum e1) (exp_size accum e2) in
             (exp_size (accum + max_size + 1) e)
   in
-  let rec is_prim (e:exp) =
-    let is_prim' (v:value) =
-      match v with
-          Op _ -> true
-        | PrimApp (_,_) -> true
-        | Lambda (_,_) -> false
-    in
-
-    match e with
-        Return _ -> true
-      | LetVal(_,v,e) -> is_prim' v && is_prim e
-      | LetCall(_,_,_,e) ->  is_prim e
-      | LetIf(_,_,e1,e2,e) -> is_prim e1 && is_prim e2 && is_prim e
-  in
 
   let size = exp_size 0 e in
-    (size < i) && is_prim e
+    size < i
 ;;
 
 (* inlining 
