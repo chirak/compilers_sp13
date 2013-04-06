@@ -2,10 +2,80 @@ open Cfg_ast
 exception Implement_Me
 exception FatalError
 
-(*******************************************************************)
-(* PS7 TODO:  interference graph construction *)
+let error (s : string) =
+  Printf.printf "%s\n" s;
+  raise FatalError
+;;
 
-(* an interference graph maps a variable x to the set of variables that
+module VarSet =
+  Set.Make(struct let compare = Pervasives.compare type t = string end)
+;;
+let empty_set = VarSet.empty;;
+
+(* used to generate fresh variables *)
+let counter = ref 0;;
+let new_label() = 
+    let c = !counter in
+    counter := c+1; "L"^(string_of_int c)
+;;
+
+type block_node = 
+    { block_label : label;
+      instructions : block;
+      mutable live_in  : VarSet.t;
+      mutable live_out : VarSet.t;
+      mutable succ : VarSet.t;
+      mutable pred : VarSet.t;
+    };;
+
+let new_block_node (l : label) (b : block) : block_node =
+  { block_label = l;
+    instructions = b;
+    live_in  = VarSet.empty;
+    live_out = VarSet.empty;
+    succ     = VarSet.empty;
+    pred     = VarSet.empty;
+    gen_set  = VarSet.empty;
+  }
+;;
+
+let get_block_succ (b : block) =
+  let last_inst = List.nth b ((List.length b - 1)) in
+    match last_inst with
+      | Jump l -> VarSet.add l empty_set
+      | If(_,_,_,l1,l2) -> VarSet.add l2 (VarSet.add l1 empty_set)
+      | Return -> empty_set
+      | _ -> error "Last instruction of block as not a Jump, If or Return"
+;;
+
+let rec get_gen_set (b : block) (s : VarSet.t) =
+  let get_gen_set' (i : inst) (s : VarSet.t) =
+    match i with
+        Label _ -> s
+      | Move(dest,src) ->
+      | Arith (dest, o1, op, o2) ->
+      | Load(dest,src,offset) ->
+      | Store(dest,offset,src) ->
+      | Call op ->
+      | Jump l -> 
+      | If(_,_,_,_,_) -> s
+      (* if x < y then goto L1 else goto L2 *)
+      | Return  (* return to caller -- result assumed in R2 *)
+
+  match b with
+      [] -> s
+    | hd::tl ->
+        (match hd with
+
+let build_block_node (b : block) : block_node =
+  let node = new_block_node (new_label()) b in
+    node.succ <- get_block_succ b;
+    node
+;;
+
+
+
+(* an interference graph maps a variable x to the set of variables
  * y such that x and y are live at the same point in time.  It's up to
  * you how you want to represent the graph.  I've just put in a dummy
  * definition for now.  *)
