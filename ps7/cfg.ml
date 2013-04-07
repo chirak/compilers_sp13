@@ -74,7 +74,7 @@ let gen_block_set (b : block) : block_set =
 type block_node = 
     { block_label : label;
       instructions : block;
-      gen_kill_sets : block_set;
+      mutable gen_kill_sets : block_set;
       mutable live_in  : VarSet.t;
       mutable live_out : VarSet.t;
       mutable succ : VarSet.t;
@@ -84,6 +84,7 @@ type block_node =
 let new_block_node (l : label) (b : block) : block_node =
   { block_label = l;
     instructions = b;
+    gen_kill_sets = { insts = []; bgen_set = empty_set; bkill_set = empty_set };
     live_in  = VarSet.empty;
     live_out = VarSet.empty;
     succ     = VarSet.empty;
@@ -116,15 +117,12 @@ let build_block_node (b : block) : block_node =
     node
 ;;
 
-module StringMap = Map.Make(struct 
-    type key = string 
-    let compare = Pervasives.compare 
-end);;
+module StringMap = Map.Make(String);;
 
 let empty_cfg = StringMap.empty;;
 let single_cfg k v = StringMap.add k v empty_cfg;;
 
-let build_cfg (f : func) : StringMap.t =
+let build_cfg (f : func) =
     
     let base_cfg = 
         List.fold_left 
@@ -135,25 +133,26 @@ let build_cfg (f : func) : StringMap.t =
             f
     in
     
-    let mutable changed = true in
+    let changed = ref true in
 
     (* returns true if build does not mutate *)
-    let build (block : block_node) : bool =
-        let out = List.fold_left 
-          (fun a b -> VarSet.union (StringMap.find b base_cfg).live_in a) 
-          empty_set
+    let build (block : block_node) =
+        let out = VarSet.fold 
+          (fun b a -> VarSet.union (StringMap.find b base_cfg).live_in a) 
           block.succ
+          empty_set
         in
         
         if out <> block.live_out then
           block.live_out <- out; 
           block.live_in <- VarSet.union block.gen_kill_sets.bgen_set (VarSet.diff out block.gen_kill_sets.bkill_set);
-          changed <- true;          
+          changed := true;          
+    in
 
-    while changed do
-      changed <- false;
+    (while !changed do
+      changed := false;
       StringMap.iter (fun _ -> build) base_cfg;
-    done;
+    done);
 
     base_cfg
 ;;
@@ -163,7 +162,7 @@ let build_cfg (f : func) : StringMap.t =
  * y such that x and y are live at the same point in time.  It's up to
  * you how you want to represent the graph.  I've just put in a dummy
  * definition for now.  *)
-type interfere_graph = StringMap.t;;
+type interfere_graph = VarSet.t StringMap.t;;
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
@@ -173,7 +172,7 @@ let build_interfere_graph (f : func) : interfere_graph =
   let cfg = build_cfg f in
   
   let rec fold_insts (live_set : VarSet.t) (g : interfere_graph) = function
-    | { i : _; igen_set : gen; ikill_set : kill; }::tl ->
+    | { i = _; igen_set = gen; ikill_set = kill; }::tl ->
       (* Remove killed variables *)
       let live' = VarSet.diff live_set kill in
       (* Add edges from live_set nodes to gen set nodes *)
@@ -182,7 +181,7 @@ let build_interfere_graph (f : func) : interfere_graph =
           (fun x a -> 
             let connectors = StringMap.find x a in
             let connectors' = VarSet.union gen connectors in
-            StringMap.add x connectors a)
+            StringMap.add x connectors' a)
           live_set
           g
       in
@@ -218,7 +217,7 @@ let build_interfere_graph (f : func) : interfere_graph =
         live_set
         g
     in
-    fold_insts (List.rev b.gen_kill_sets.insts) live_set g' 
+    fold_insts live_set g' (List.rev b.gen_kill_sets.insts)
   in
   
   StringMap.fold (fun _ -> inter_build_block) cfg empty_cfg
