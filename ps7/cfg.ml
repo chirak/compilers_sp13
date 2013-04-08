@@ -15,21 +15,29 @@ let new_label() =
 ;;
 
 module VarSet =
+  Set.Make(struct let compare = Pervasives.compare type t = operand end)
+;;
+
+module StringSet =
   Set.Make(struct let compare = Pervasives.compare type t = string end)
 ;;
 
 let empty_set = VarSet.empty;;
-let single (v : var) = VarSet.add v empty_set;;
+let single (o : operand) = VarSet.add o empty_set;;
 (* Builds a VarSet from a list of operands. Only Vars are added *)
 let set_vars (ops : operand list) : VarSet.t =
-  List.fold_left (fun s -> function
-                      | Var x -> VarSet.add x s 
+  List.fold_left (fun s o -> match o with
+                      | Var _ | Reg _ -> VarSet.add o s 
                       | _ -> s) empty_set ops
+;;
+
+let varset2string (set : VarSet.t) (label : string) =
+  let vars = VarSet.fold (fun s1 s2 -> (op2string s1)^" "^s2) set "" in
+    Printf.sprintf "%s: %s" label vars
 ;;
 
 (* Gen and kill set for a single instruction *)
 type inst_set = { i : inst; igen_set : VarSet.t; ikill_set : VarSet.t; };;
-
 (* Produces a gen set and kill set for a single instruction *)
 let rec gen_inst_set (i : inst) : inst_set =
   let (gen_set, kill_set) = 
@@ -42,6 +50,13 @@ let rec gen_inst_set (i : inst) : inst_set =
       | _ -> (empty_set, empty_set)
   in
     { i = i; igen_set = gen_set; ikill_set = kill_set }
+;;
+
+let instset2string (i : inst_set) : string =
+  let inst_str = inst2string i.i in
+  let gen_str  = varset2string i.igen_set "[Gen]" in
+  let kill_str = varset2string i.ikill_set "[Kill]" in
+    Printf.sprintf "%s\n\t%s\n\t%s" inst_str gen_str kill_str
 ;;
 
 (* Produces gen and kill sets for a single block *)
@@ -70,6 +85,12 @@ let gen_block_set (b : block) : block_set =
     { insts = inst_sets; bgen_set = block_gen_set; bkill_set = block_kill_set }
 ;;
 
+let blockset2string (b : block_set) (label : string) : string =
+  let gen_str  = varset2string b.bgen_set "[Gen]" in
+  let kill_str = varset2string b.bkill_set "[Kill]" in
+    Printf.sprintf "\t%s\n\t%s" gen_str kill_str
+;;
+
 (* may have to add more fields for register coalescing *)
 type block_node = 
     { block_label : label;
@@ -77,7 +98,7 @@ type block_node =
       mutable gen_kill_sets : block_set;
       mutable live_in  : VarSet.t;
       mutable live_out : VarSet.t;
-      mutable succ : VarSet.t;
+      mutable succ : StringSet.t;
       (* mutable pred : VarSet.t; *)
     };;
 
@@ -87,20 +108,19 @@ let new_block_node (l : label) (b : block) : block_node =
     gen_kill_sets = { insts = []; bgen_set = empty_set; bkill_set = empty_set };
     live_in  = VarSet.empty;
     live_out = VarSet.empty;
-    succ     = VarSet.empty;
+    succ     = StringSet.empty;
     (* pred     = VarSet.empty; *)
   }
 ;;
 
-let get_block_succ (b : block) =
+let get_block_succ (b : block) : StringSet.t =
   let last_inst = List.nth b ((List.length b - 1)) in
     match last_inst with
-      | Jump l -> VarSet.add l empty_set
-      | If(_,_,_,l1,l2) -> VarSet.add l2 (VarSet.add l1 empty_set)
-      | Return -> empty_set
+      | Jump l -> StringSet.add l StringSet.empty
+      | If(_,_,_,l1,l2) -> StringSet.add l2 (StringSet.add l1 StringSet.empty)
+      | Return -> StringSet.empty
       | _ -> error "Last instruction of block was not a Jump, If, or Return"
 ;;
-
 
 let build_block_node (b : block) : block_node =
   let label =
@@ -117,52 +137,67 @@ let build_block_node (b : block) : block_node =
     node
 ;;
 
-module StringMap = Map.Make(String);;
+module StringMap = 
+  Map.Make(struct let compare = Pervasives.compare type t = string end)
+;;
 
 let empty_cfg = StringMap.empty;;
 let single_cfg k v = StringMap.add k v empty_cfg;;
 
 let build_cfg (f : func) =
     
-    let base_cfg = 
-        List.fold_left 
-            (fun a b -> 
-                let block_node = build_block_node b in 
-                  StringMap.add block_node.block_label block_node a)
-            empty_cfg
-            f
-    in
-    
-    let changed = ref true in
+  let base_cfg = 
+    List.fold_left 
+      (fun a b -> 
+         let block_node = build_block_node b in 
+           StringMap.add block_node.block_label block_node a)
+      empty_cfg
+      f
+  in
 
-    (* returns true if build does not mutate *)
-    let build (block : block_node) =
-        let out = VarSet.fold 
-          (fun b a -> VarSet.union (StringMap.find b base_cfg).live_in a) 
-          block.succ
-          empty_set
-        in
-        
-        if out <> block.live_out then
-          block.live_out <- out; 
-          block.live_in <- VarSet.union block.gen_kill_sets.bgen_set (VarSet.diff out block.gen_kill_sets.bkill_set);
-          changed := true;          
+  let changed = ref true in
+
+  (* returns true if build does not mutate *)
+  let build (block : block_node) =
+    let out = StringSet.fold 
+                (fun b a -> 
+                   VarSet.union (StringMap.find b base_cfg).live_in a) 
+                block.succ empty_set
     in
+      (* print_string (varset2string out ""); *)
+      (* print_string "\n"; *)
+      (* print_string (varset2string block.live_out ""); *)
+      (* print_string "\n"; *)
+      if not (VarSet.equal out block.live_out) then
+        (block.live_out <- out; 
+         block.live_in <- VarSet.union block.gen_kill_sets.bgen_set (VarSet.diff out block.gen_kill_sets.bkill_set);
+         changed := true;)
+  in
 
     (while !changed do
-      changed := false;
-      StringMap.iter (fun _ -> build) base_cfg;
-    done);
+       changed := false;
+       StringMap.iter (fun _ -> build) base_cfg;
+     done);
 
     base_cfg
 ;;
 
+module OpMap = 
+  Map.Make(struct let compare = Pervasives.compare type t = operand end)
+;;
 
 (* an interference graph maps a variable x to the set of variables
  * y such that x and y are live at the same point in time.  It's up to
  * you how you want to represent the graph.  I've just put in a dummy
  * definition for now.  *)
-type interfere_graph = VarSet.t StringMap.t;;
+type interfere_graph = VarSet.t OpMap.t;;
+
+let print_graph (i : interfere_graph) =
+  OpMap.iter (fun k v ->
+                    let nodes = varset2string v "" in
+                      Printf.printf "%s -> %s\n" (op2string k) nodes) i
+;;
+
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
@@ -176,23 +211,28 @@ let build_interfere_graph (f : func) : interfere_graph =
       (* Remove killed variables *)
       let live' = VarSet.diff live_set kill in
       (* Add edges from live_set nodes to gen set nodes *)
+      print_string "ENTERING G'\n";
       let g' =
         VarSet.fold
           (fun x a -> 
-            let connectors = StringMap.find x a in
+            Printf.printf "Finding %s for g'\n" (op2string x);
+            let connectors = OpMap.find x a in
             let connectors' = VarSet.union gen connectors in
-            StringMap.add x connectors' a)
+            OpMap.add x connectors' a)
           live_set
           g
       in
+      print_string "EXITING G'\n";
       (* Add edges from gen set nodes to live_set nodes *)
       let g'' = 
         VarSet.fold 
           (fun x a -> 
-            if StringMap.mem x a then
-              StringMap.add x (VarSet.union (StringMap.find x a) live_set) a
+            print_string "\nENTERING G''\n";
+            Printf.printf "Finding %s for g''\n" (op2string x);
+            if OpMap.mem x a then
+              OpMap.add x (VarSet.union (OpMap.find x a) live_set) a
             else
-              StringMap.add x live_set a)
+              OpMap.add x live_set a)
           gen
           g'
       in
@@ -204,14 +244,16 @@ let build_interfere_graph (f : func) : interfere_graph =
   in
   
   let inter_build_block (b : block_node) (g : interfere_graph) =
-    let live_set = b.live_out in
+    let live_set = b.live_out in        
     let g' = 
       VarSet.fold 
         (fun var new_graph -> 
-          StringMap.add 
+          Printf.printf "Finding %s for g' block\n" (op2string var);
+          print_graph g;
+          OpMap.add 
             var
             (VarSet.union
-              (StringMap.find var g)
+              (if OpMap.mem var g then OpMap.find var g else empty_set)
               (VarSet.diff live_set (single var)))
             new_graph)
         live_set
@@ -220,7 +262,9 @@ let build_interfere_graph (f : func) : interfere_graph =
     fold_insts live_set g' (List.rev b.gen_kill_sets.insts)
   in
   
-  StringMap.fold (fun _ -> inter_build_block) cfg empty_cfg
+  StringMap.fold (fun _ -> inter_build_block) cfg OpMap.empty
+;;
+
 
 
 (*******************************************************************)
