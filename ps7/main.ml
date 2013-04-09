@@ -1,3 +1,5 @@
+open Cfg
+open Interfere_graph
 (* This magic is used to glue the generated lexer and parser together.
  * Expect one command-line argument, a file to parse.
  * You do not need to understand this interaction with the system. *)
@@ -15,8 +17,9 @@ let parse_stdin() =
 
 let _ =
   let prog = parse_file() in
-  let functions = List.map Cfg_ast.fn2blocks prog in
-  let function_str = Cfg_ast.prog2string functions in
-  let graphs = List.map Cfg.build_interfere_graph functions in
-    print_string function_str
+  let cfg_functions = List.map Cfg_ast.fn2blocks prog in
+  let cfgs = List.map build_cfg cfg_functions in
+  (* let cfg_prog = Cfg_ast.prog2string functions in *)
+  let igraphs = List.map build_interfere_graph cfgs in
+    List.iter (fun g -> print_graph g; print_string "\n\n";) igraphs
 

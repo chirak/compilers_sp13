@@ -24,8 +24,9 @@ cfg: mips cish
 	$(COMPILER) -c cish_ast.ml
 	$(COMPILER) -c cfg_ast.ml
 	$(COMPILER) -c cfg.ml
+	$(COMPILER) -c interfere_graph.ml
 	$(COMPILER) -c main.ml
-	$(COMPILER) -o ps7_cfg cish_ast.cmo cish_lex.cmo cish_parse.cmo word32.cmo mips.cmo cfg_ast.cmo cfg.cmo main.cmo
+	$(COMPILER) -o ps7_cfg cish_ast.cmo cish_lex.cmo cish_parse.cmo word32.cmo mips.cmo cfg_ast.cmo cfg.cmo interfere_graph.cmo main.cmo
 
 clean:
 	-rm *.cmo *.cmi ps7_cfg cish_parse.ml cish_parse.mli cish_lex.ml 
