@@ -55,11 +55,9 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
             (VarSet.union
               (if OpMap.mem var g then OpMap.find var g else empty_set)
               (VarSet.diff live_set (single var)))
-            new_graph)
-        live_set
-        g
+            new_graph) live_set g
     in
-    fold_insts live_set g' (List.rev b.gen_kill_sets.insts)
+      fold_insts live_set g' (List.rev b.gen_kill_sets.insts)
   in
   
   StringMap.fold (fun _ -> inter_build_block) cfg OpMap.empty

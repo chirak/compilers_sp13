@@ -33,6 +33,10 @@ let vs2string (set : VarSet.t) =
 module StringSet =
   Set.Make(struct let compare = Pervasives.compare type t = string end)
 
+let ss2string (set : StringSet.t) =
+  let vars = StringSet.fold (fun s1 s2 -> s1^" "^s2) set "" in
+    Printf.sprintf "%s" vars
+
 (* Record thats holds gen and kill set for a single instruction *)
 type inst_set = 
   { 
@@ -49,12 +53,12 @@ let instset2string (i : inst_set) : string =
 
 (* Produces a gen set and kill set for a single instruction *)
 (*
-Statement               Gen     Kill             
-x:=y                    {y}      {x}
-x:=p(y,z)               {y,z}    {x}
-x:=*(y+i)               {y}      {x}
-*(v+i):=x               {x}      { }
-Call f                  {f}      {x}
+Statement               Gen        Kill             
+x:=y                    {y}        {x}
+x:=p(y,z)               {y,z}      {x}
+x:=*(y+i)               {y}        {x}
+*(v+i):=x               {x}        { }
+Call f                  {f}        {x}
 *)
 let rec generate_inst_set (i : inst) : inst_set =
   let (gen_set, kill_set) = 
@@ -131,6 +135,7 @@ let print_node (b : block_node) =
   List.iter (fun i -> Printf.printf "\t%s\n" (inst2string i.i))
     b.gen_kill_sets.insts;
   Printf.printf "\t%s\n" ("[Live Out]: "^(vs2string b.live_out));
+  Printf.printf "\t%s\n" ("[Successors]: "^(ss2string b.succ));
 ;;
 
 (* Determines the outgoing edges of a single block by inspecting the last
