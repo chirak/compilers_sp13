@@ -108,13 +108,13 @@ let gen_block_set (b : block) : block_set =
 
 (* Single node of Control Flow Graph *)
 type block_node = 
-    {
-      block_label : label;
-      mutable gen_kill_sets : block_set;
-      mutable live_in  : VarSet.t;
-      mutable live_out : VarSet.t;
-      mutable succ : StringSet.t; (* Set of block labels *)
-    }
+  {
+    block_label : label;
+    mutable gen_kill_sets : block_set;
+    mutable live_in  : VarSet.t;
+    mutable live_out : VarSet.t;
+    mutable succ : StringSet.t; (* Set of block labels *)
+  }
 
 let new_block_node (l : label) : block_node =
   { 
@@ -124,6 +124,14 @@ let new_block_node (l : label) : block_node =
     live_out = VarSet.empty;
     succ     = StringSet.empty;
   }
+
+let print_node (b : block_node) =
+  Printf.printf "\t%s\n" ("[Live In]: "^(vs2string b.live_in));
+  print_string "\t[Instructions]:\n";
+  List.iter (fun i -> Printf.printf "\t%s\n" (inst2string i.i))
+    b.gen_kill_sets.insts;
+  Printf.printf "\t%s\n" ("[Live Out]: "^(vs2string b.live_out));
+;;
 
 (* Determines the outgoing edges of a single block by inspecting the last
  * instruction of the block *)
@@ -156,6 +164,10 @@ module StringMap =
   Map.Make(struct let compare = Pervasives.compare type t = string end)
 type cfg = block_node StringMap.t
 let empty_cfg = StringMap.empty
+let print_cfg (cfg : cfg) =
+  StringMap.iter (fun k v ->
+                    Printf.printf "\n[Node: %s]\n" k;
+                    print_node v;) cfg
 
 (* Build a Control Flow Graph for single function *)
 let build_cfg (f : func) : cfg =

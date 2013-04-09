@@ -50,7 +50,6 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
     let g' = 
       VarSet.fold 
         (fun var new_graph -> 
-          print_graph g;
           OpMap.add 
             var
             (VarSet.union
