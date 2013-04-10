@@ -29,13 +29,9 @@ cfg: mips cish
 	$(COMPILER) -o ps7_cfg cish_ast.cmo cish_lex.cmo cish_parse.cmo word32.cmo mips.cmo cfg_ast.cmo cfg.cmo interfere_graph.cmo main.cmo
 
 test: mips cish
-	$(COMPILER) -c cish_ast.ml
-	$(COMPILER) -c cfg_ast.ml
-	$(COMPILER) -c cfg.ml
-	$(COMPILER) -c interfere_graph.ml
-	$(COMPILER) -c block_node_test.ml
-	$(COMPILER) -c interfere_test.ml
-	$(COMPILER) -o run_test cish_ast.cmo cish_lex.cmo cish_parse.cmo word32.cmo mips.cmo cfg_ast.cmo cfg.cmo block_node_test.ml interfere_graph.cmo interfere_test.cmo
+	$(COMPILER) -c tester.ml
+	$(COMPILER) -c main_test.ml	
+	$(COMPILER) -o run_test cish_ast.cmo cish_lex.cmo cish_parse.cmo word32.cmo mips.cmo cfg_ast.cmo cfg.cmo interfere_graph.cmo tester.cmo main_test.cmo
 
 clean:
 	-rm *.cmo *.cmi run_test ps7_cfg cish_parse.ml cish_parse.mli cish_lex.ml 

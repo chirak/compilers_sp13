@@ -4,7 +4,7 @@ open Cfg
 type iGraphEdge = (operand * operand)
 
 let compare_edge (o1a, o1b) (o2a, o2b) =
-  if (o1a = o2a || o1a = o2b) && (o1b = o2a || o1b = o2b) then 
+  if (o1a = o2a && o1b = o2b) || (o1a = o2b && o1b = o2a) then 
     0 
   else 
     Pervasives.compare (o1a, o1b) (o2a, o2b)
@@ -14,10 +14,20 @@ module IGraphEdgeSet =
 
 type interfere_graph = IGraphEdgeSet.t
 
+let graph_add (l, r) g =
+  if l = r then
+    g
+  else
+    IGraphEdgeSet.add (l, r) g
+
+let graph2string (i : interfere_graph) =
+  String.concat "" 
+    (List.map 
+      (fun (o1, o2) -> Printf.sprintf "%s <--> %s\n" (op2string o1) (op2string o2))
+      (IGraphEdgeSet.elements i))
+
 let print_graph (i : interfere_graph) =
-  IGraphEdgeSet.iter 
-    (fun (o1, o2) -> Printf.printf "%s <--> %s\n" (op2string o1) (op2string o2))
-    i
+  print_string (graph2string i)
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
@@ -30,7 +40,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
       (fun var ->
         let other_nodes = VarSet.diff set (single var) in
         VarSet.fold
-          (fun var' -> IGraphEdgeSet.add (var, var'))
+          (fun var' -> graph_add (var, var'))
           other_nodes)
       set
   in
@@ -43,7 +53,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
           VarSet.fold
             (fun var -> 
               VarSet.fold
-                (fun var' -> IGraphEdgeSet.add (var, var'))
+                (fun var' -> graph_add (var, var'))
                 gen)
             live'
             g
