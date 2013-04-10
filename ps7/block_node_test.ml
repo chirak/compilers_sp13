@@ -1,4 +1,4 @@
-open Cfg_ast
+(*open Cfg_ast
 open Cfg
 (* 
  * Label L1
@@ -43,3 +43,4 @@ let _ =
   let actual = List.Map generate_inst_set [i1;i2;i3;i4;return] in
   let pass =
 
+*)

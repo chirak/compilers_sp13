@@ -25,6 +25,16 @@ let print_graph (i : interfere_graph) =
  * are live-in and live-out for each program point. *)
 let build_interfere_graph (cfg : cfg) : interfere_graph =
   
+  let connect_set (set : VarSet.t) =
+    VarSet.fold
+      (fun var ->
+        let other_nodes = VarSet.diff set (single var) in
+        VarSet.fold
+          (fun var' -> IGraphEdgeSet.add (var, var'))
+          other_nodes)
+      set
+  in
+
   let rec fold_insts (live_set : VarSet.t) (g : interfere_graph) = function
     | { i = _; igen_set = gen; ikill_set = kill; }::tl ->
         let live' = VarSet.diff live_set kill in
@@ -38,24 +48,18 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
             live'
             g
         in
+        let g'' = connect_set gen g'
+        in
         (* Add gen set to live set *)
         let live'' = VarSet.union gen live' in
           (* Recur *)
-          fold_insts live'' g' tl
+          fold_insts live'' g'' tl
     | [] -> g
   in
   
   let inter_build_block (b : block_node) (g : interfere_graph) =
     let live_set = b.live_out in        
-    let g' = 
-      VarSet.fold 
-        (fun var -> 
-          let other_nodes = VarSet.diff live_set (single var) in
-            VarSet.fold
-              (fun var' -> IGraphEdgeSet.add (var, var'))
-              other_nodes)
-        live_set
-        g
+    let g' = connect_set live_set g
     in
       fold_insts live_set g' (List.rev b.gen_kill_sets.insts)
   in
