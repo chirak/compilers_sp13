@@ -18,6 +18,8 @@ module VarSet =
   Set.Make(struct let compare = Pervasives.compare type t = operand end)
 let empty_set = VarSet.empty;;
 let single (o : operand) = VarSet.add o empty_set;;
+let vs_add_all (ops : operand list) : VarSet.t =
+  List.fold_left (fun set op -> VarSet.add op set) empty_set ops
 
 (* Builds a VarSet from a list of operands. Only Vars and Regs are added *)
 let set_vars (ops : operand list) : VarSet.t =
