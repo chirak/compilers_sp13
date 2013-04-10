@@ -35,7 +35,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
               VarSet.fold
                 (fun var' -> IGraphEdgeSet.add (var, var'))
                 gen)
-            live_set
+            live'
             g
         in
         (* Add gen set to live set *)
