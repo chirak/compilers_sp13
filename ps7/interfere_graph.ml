@@ -3,11 +3,13 @@ open Cfg
 
 type iGraphEdge = (operand * operand)
 
-let compare_edge (o1a, o1b) (o2a, o2b) =
-  if (o1a = o2a && o1b = o2b) || (o1a = o2b && o1b = o2a) then 
-    0 
-  else 
-    Pervasives.compare (o1a, o1b) (o2a, o2b)
+let equal_edge (o1a,o2a) (o1b,o2b) =
+  (o1a = o2a && o1b = o2b) || (o1a = o2b && o1b = o2a)
+let igedge2str (o1,o2) =
+  Printf.sprintf "%s <--> %s\n" (op2string o1) (op2string o2)
+
+let compare_edge e1 e2 =
+  if equal_edge e1 e2 then 0 else Pervasives.compare e1 e2
 
 module IGraphEdgeSet = 
   Set.Make(struct let compare = compare_edge type t = iGraphEdge end)
@@ -15,19 +17,24 @@ module IGraphEdgeSet =
 type interfere_graph = IGraphEdgeSet.t
 
 let graph_add (l, r) g =
-  if l = r then
+  let rec ormap f l =
+    match l with
+        [] -> false
+      | hd::tl -> f hd || ormap f tl
+  in
+  if l = r || (ormap (equal_edge (l,r)) (IGraphEdgeSet.elements g)) then
     g
   else
     IGraphEdgeSet.add (l, r) g
 
-let graph2string (i : interfere_graph) =
+let igraph2string (i : interfere_graph) =
   String.concat "" 
     (List.map 
-      (fun (o1, o2) -> Printf.sprintf "%s <--> %s\n" (op2string o1) (op2string o2))
+      (fun edge -> igedge2str edge)
       (IGraphEdgeSet.elements i))
 
 let print_graph (i : interfere_graph) =
-  print_string (graph2string i)
+  print_string (igraph2string i)
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
@@ -58,8 +65,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
             live'
             g
         in
-        let g'' = connect_set gen g'
-        in
+        let g'' = connect_set gen g' in
         (* Add gen set to live set *)
         let live'' = VarSet.union gen live' in
           (* Recur *)
