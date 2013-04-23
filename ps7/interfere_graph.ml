@@ -19,20 +19,23 @@ let graph_add (l, r) g =
     g
   else (
     let c = Pervasives.compare l r in
-      if c <= 0 then
+      if c < 0 then
         IGraphEdgeSet.add (l, r) g
       else
         IGraphEdgeSet.add (r, l) g
   )
 
-let graph2string (i : interfere_graph) =
+let igedge2str (o1,o2) =
+  Printf.sprintf "%s <--> %s\n" (op2string o1) (op2string o2)
+
+let igraph2string (i : interfere_graph) =
   String.concat "" 
     (List.map 
-      (fun (o1, o2) -> Printf.sprintf "%s <--> %s\n" (op2string o1) (op2string o2))
+      (fun edge -> igedge2str edge)
       (IGraphEdgeSet.elements i))
 
 let print_graph (i : interfere_graph) =
-  print_string (graph2string i)
+  print_string (igraph2string i)
 
 (* given a function (i.e., list of basic blocks), construct the
  * interference graph for that function.  This will require that
@@ -63,8 +66,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
             live'
             g
         in
-        let g'' = connect_set gen g'
-        in
+        let g'' = connect_set gen g' in
         (* Add gen set to live set *)
         let live'' = VarSet.union gen live' in
           (* Recur *)

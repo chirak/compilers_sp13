@@ -20,6 +20,7 @@ let _ =
   let cfg_functions = List.map Cfg_ast.fn2blocks prog in
   let cfgs = List.map build_cfg cfg_functions in
   let igraphs = List.map build_interfere_graph cfgs in
+    print_string (Cfg_ast.prog2string cfg_functions);
     List.iter print_cfg cfgs;
     print_string "\n\n---------------------\n\n";
     List.iter (fun g -> print_graph g; print_string "\n\n";) igraphs;
