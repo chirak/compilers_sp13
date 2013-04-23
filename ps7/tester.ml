@@ -39,7 +39,7 @@ let runTests () =
   let comparer = IGraphEdgeSet.equal in
 
   let case = test engine source_serializer expected_serializer comparer in
-
+(*
     (*
      * ---------------------------------------------------------------------- *
      * Simple base case there should be no interference between h and f.
@@ -138,7 +138,7 @@ let runTests () =
      *    Return
      *)
     case [block_4a; block_4b; block_4c] igraph_4;
-
+*)
     (*
      * ---------------------------------------------------------------------- *
      * Case from register allocation lecture slides. Creates the most

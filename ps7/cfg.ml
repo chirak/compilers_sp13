@@ -45,6 +45,7 @@ type inst_set =
     i : inst;
     igen_set : VarSet.t;
     ikill_set : VarSet.t;
+    move : (operand * operand) option;
   }
 
 let instset2string (i : inst_set) : string =
@@ -55,7 +56,7 @@ let instset2string (i : inst_set) : string =
 
 (* Produces a gen set and kill set for a single instruction *)
 (*
-Statement               Gen        Kill             
+Statement               Gen        Kill
 x:=y                    {y}        {x}
 x:=p(y,z)               {y,z}      {x}
 x:=*(y+i)               {y}        {x}
@@ -63,16 +64,16 @@ x:=*(y+i)               {y}        {x}
 Call f                  {f}        {x}
 *)
 let rec generate_inst_set (i : inst) : inst_set =
-  let (gen_set, kill_set) = 
+  let (gen_set, kill_set, move) = 
     match i with
-      | Move(dest,src)          -> (set_vars [src], set_vars[dest])
-      | Arith (dest, o1, _, o2) -> (set_vars [o1;o2], set_vars [dest])
-      | Load(dest,src,_)        -> (set_vars [src], set_vars [dest])
-      | Store(dest,_,src)       -> (set_vars[src], empty_set)
-      | Call f                  -> (set_vars[f], empty_set)
-      | _                       -> (empty_set, empty_set)
+      | Move(dest,src)          -> (set_vars [src], set_vars[dest], Some((dest, src)))
+      | Arith (dest, o1, _, o2) -> (set_vars [o1;o2], set_vars [dest], None)
+      | Load(dest,src,_)        -> (set_vars [src], set_vars [dest], None)
+      | Store(dest,_,src)       -> (set_vars [src], empty_set, None)
+      | Call f                  -> (set_vars [f], empty_set, None)
+      | _                       -> (empty_set, empty_set, None)
   in
-    { i = i; igen_set = gen_set; ikill_set = kill_set }
+    { i = i; igen_set = gen_set; ikill_set = kill_set; move = move }
 
 (* Record thats holds gen and kill sets for a single block
  * Also holds gen and kill sets for each instruction in block *)
