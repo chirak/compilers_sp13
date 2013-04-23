@@ -106,6 +106,7 @@ let out3 : interfere_graph =
         f, h;
         f, j;
         h, j;
+        j, k;
       ]
       IGraphEdgeSet.empty
 

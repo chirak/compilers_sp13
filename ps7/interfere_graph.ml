@@ -4,9 +4,9 @@ open Cfg
 type iGraphEdge = (operand * operand)
 
 let compare_edge (o1a, o1b) (o2a, o2b) =
-  if (o1a = o2a && o1b = o2b) || (o1a = o2b && o1b = o2a) then 
-    0 
-  else 
+  if (o1a = o2a && o1b = o2b) || (o1a = o2b && o1b = o2a) then
+    0
+  else
     Pervasives.compare (o1a, o1b) (o2a, o2b)
 
 module IGraphEdgeSet = 
@@ -17,8 +17,13 @@ type interfere_graph = IGraphEdgeSet.t
 let graph_add (l, r) g =
   if l = r then
     g
-  else
-    IGraphEdgeSet.add (l, r) g
+  else (
+    let c = Pervasives.compare l r in
+      if c <= 0 then
+        IGraphEdgeSet.add (l, r) g
+      else
+        IGraphEdgeSet.add (r, l) g
+  )
 
 let graph2string (i : interfere_graph) =
   String.concat "" 
