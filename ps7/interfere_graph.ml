@@ -1,35 +1,34 @@
 open Cfg_ast
 open Cfg
 
-type iGraphEdge = (operand * operand * bool)
+type iGraphEdge = 
+  | MoveEdge of (operand * operand)
+  | InterfereEdge of (operand * operand)
 
-let compare_edge (o1a, o1b, o1f) (o2a, o2b, o2f) =
-  if o1f = o2f && ((o1a = o2a && o1b = o2b) || (o1a = o2b && o1b = o2a)) then
-    0
-  else
-    Pervasives.compare (o1a, o1b, o1f) (o2a, o2b, o2f)
+type iGraphEdgeType = E_Move | E_Interfere
 
 module IGraphEdgeSet = 
-  Set.Make(struct let compare = compare_edge type t = iGraphEdge end)
+  Set.Make(struct let compare = Pervasives.compare type t = iGraphEdge end)
 
 type interfere_graph = IGraphEdgeSet.t
 
-let graph_add (l, r) move_related g =
+let graph_add (l, r) edge_type g =
   if l = r then
     g
   else (
     let c = Pervasives.compare l r in
-      if c < 0 then
-        IGraphEdgeSet.add (l, r, move_related) g
-      else
-        IGraphEdgeSet.add (r, l, move_related) g
+    let e = if c < 0 then (l, r) else (r, l) in
+    let edge = 
+      match edge_type with
+      | E_Move      -> MoveEdge e
+      | E_Interfere -> InterfereEdge e
+    in
+      IGraphEdgeSet.add edge g
   )
 
-let igedge2str (o1, o2, move_related) =
-  if move_related then
-    Printf.sprintf "%s <==> %s\n" (op2string o1) (op2string o2)
-  else
-    Printf.sprintf "%s <--> %s\n" (op2string o1) (op2string o2)
+let igedge2str = function
+  | MoveEdge(o1, o2)      -> Printf.sprintf "%s <==> %s\n" (op2string o1) (op2string o2)
+  | InterfereEdge(o1, o2) -> Printf.sprintf "%s <--> %s\n" (op2string o1) (op2string o2)
 
 let igraph2string (i : interfere_graph) =
   String.concat "" 
@@ -51,7 +50,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
       (fun var ->
         let other_nodes = VarSet.diff set (single var) in
         VarSet.fold
-          (fun var' -> graph_add (var, var') false)
+          (fun var' -> graph_add (var, var') E_Interfere)
           other_nodes)
       set
   in
@@ -65,7 +64,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
             (fun var -> 
               VarSet.fold
                 (fun var' -> 
-                  graph_add (var, var') false)
+                  graph_add (var, var') E_Interfere)
                 gen)
             live'
             g
@@ -90,7 +89,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
         List.fold_right
           (fun inst g ->
             match inst with
-            | { i = _; igen_set = _; ikill_set = _; move = Some(move); } -> graph_add move true g
+            | { i = _; igen_set = _; ikill_set = _; move = Some(move); } -> graph_add move E_Move g
             | _ -> g)
           block.gen_kill_sets.insts)
       cfg

@@ -70,7 +70,7 @@ let block_2c : block =
   ]
 
 let igraph_2 : interfere_graph =
-  List.fold_right (fun x -> graph_add x false) [(c, a); (c, b)] IGraphEdgeSet.empty
+  List.fold_right (fun x -> graph_add x E_Interfere) [(c, a); (c, b)] IGraphEdgeSet.empty
 
 (* ------------------------------------------ *)
 
@@ -103,7 +103,7 @@ let block_3c : block =
 
 let igraph_3 : interfere_graph =
   List.fold_right
-      (fun x -> graph_add x false)
+      (fun x -> graph_add x E_Interfere)
       [
         a, b;
         a, d;
@@ -142,7 +142,7 @@ let block_4c : block =
 
 let igraph_4 : interfere_graph =
   List.fold_right
-      (fun x -> graph_add x false)
+      (fun x -> graph_add x E_Interfere)
       [
         f,g;
         f,h;
@@ -174,7 +174,7 @@ let main_block : block =
 
 let main_out : interfere_graph =
   List.fold_right
-      (fun x -> graph_add x false)
+      (fun x -> graph_add x E_Interfere)
       [
         b, e;
         b, m;
