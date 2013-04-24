@@ -26,10 +26,13 @@ type operandStackMember =
 
 let get_info (g : interfere_graph) =
   let add2info x info =
-    if OperandMap.mem x info then
-      OperandMap.add x ((OperandMap.find x info) + 1) info
-    else
-      OperandMap.add x 1 info
+    let amt = 
+      if OperandMap.mem x info then
+        ((OperandMap.find x info) + 1)
+      else
+        1
+    in
+      OperandMap.add x amt info
   in
     IGraphEdgeSet.fold
       (fun x a -> 
@@ -61,17 +64,17 @@ let find_low_degree (gi : graph_info) (k : int) : operand option =
 
 let rec simplify (g : interfere_graph) (k : int) (stack : operandStackMember list) : operandStackMember list =
   let info = remove_move_edges (get_info g) g in
-  match find_low_degree info k with
-  | None -> coalesce g k stack
-  | Some(operand) -> 
-      simplify 
-        (IGraphEdgeSet.filter 
-          (function 
-            | InterfereEdge(l, r) -> not (operand = l || operand = r) 
-            | MoveEdge(l, r)      -> raise Impossible)
-          g)
-        k 
-        ((Normal(operand))::stack)
+    match find_low_degree info k with
+    | None -> coalesce g k stack
+    | Some(operand) -> 
+        simplify 
+          (IGraphEdgeSet.filter 
+            (function 
+              | InterfereEdge(l, r) -> not (operand = l || operand = r) 
+              | MoveEdge(l, r)      -> raise Impossible)
+            g)
+          k 
+          ((Normal(operand))::stack)
 
 and coalesce (g : interfere_graph) (k : int) (stack : operandStackMember list) : operandStackMember list =
   let rec find_candidate = function
@@ -89,10 +92,18 @@ and coalesce (g : interfere_graph) (k : int) (stack : operandStackMember list) :
             g
             VarSet.empty
       in
+      (* Brigg's Conservative Coalescing Strategy *)
+      let can_coalesce neighbors graph k = 
+        let gi = get_info graph in
+        let big_neighbors = 
+          VarSet.filter (fun o -> OperandMap.find o gi >= k) neighbors
+        in
+          VarSet.cardinal big_neighbors < k
+      in
       let left_edges = VarSet.diff (find_edges l) (single r) in
       let right_edges = VarSet.diff (find_edges r) (single l) in
       let combined = VarSet.union left_edges right_edges in
-        if VarSet.cardinal combined < k then
+        if can_coalesce combined g k then
           Some(((l, r), combined))
         else
           find_candidate t
