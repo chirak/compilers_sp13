@@ -15,7 +15,7 @@ open Interfere_graph
  *)
 
 module NodeMap = Map.Make(OperandNode)
-type graph_info = int NodeMap.t
+type graphInfo = int NodeMap.t
 
 module NodeSet = Set.Make(OperandNode)
 let singleton x = NodeSet.add x NodeSet.empty
@@ -43,18 +43,16 @@ let get_info (g : interfere_graph) =
       g
       NodeMap.empty
 
-let remove_move_edges (gi : graph_info) (g : interfere_graph) =
+let remove_move_edges (gi : graphInfo) (g : interfere_graph) =
     IGraphEdgeSet.fold
       (fun x a ->
         match x with
-        | MoveEdge(l, r) ->
-          NodeMap.remove l (NodeMap.remove r a)
+        | MoveEdge(l, r) -> NodeMap.remove l (NodeMap.remove r a)
         | _ -> a)
       g
       gi
 
-
-let find_low_degree (gi : graph_info) (k : int) : operandNode option =
+let find_low_degree (gi : graphInfo) (k : int) : operandNode option =
   NodeMap.fold
     (fun operand degree -> function
       | Some(_) as s -> s
@@ -62,36 +60,41 @@ let find_low_degree (gi : graph_info) (k : int) : operandNode option =
     gi
     None
 
+let remove_node (n : operandNode) =
+  IGraphEdgeSet.filter 
+    (function 
+      | InterfereEdge(l, r) -> not (n = l || n = r) 
+      | MoveEdge(l, r)      -> raise Impossible)
+
+let find_neighbors x g =
+  IGraphEdgeSet.fold 
+    (fun edge set -> 
+      match edge with InterfereEdge(l', r') | MoveEdge(l', r') -> 
+        if l' = x then
+          NodeSet.add r' set 
+        else if r' = x then
+          NodeSet.add l' set
+        else
+          set)
+      g
+      NodeSet.empty
+
 let rec simplify (g : interfere_graph) (k : int) (stack : nodeStackMember list) : nodeStackMember list =
-  let info = remove_move_edges (get_info g) g in
-    match find_low_degree info k with
-    | None -> coalesce g k stack
-    | Some(operand) -> 
+  if IGraphEdgeSet.is_empty g then 
+    stack
+  else
+    let info = remove_move_edges (get_info g) g in
+      match find_low_degree info k with
+      | None -> coalesce g k stack
+      | Some(operand) -> 
         simplify 
-          (IGraphEdgeSet.filter 
-            (function 
-              | InterfereEdge(l, r) -> not (operand = l || operand = r) 
-              | MoveEdge(l, r)      -> raise Impossible)
-            g)
+          (remove_node operand g)
           k 
           ((S_Normal(operand))::stack)
 
 and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : nodeStackMember list =
   let rec find_candidate = function
     | MoveEdge(l, r)::t ->
-      let find_edges x =
-        IGraphEdgeSet.fold 
-          (fun edge set -> 
-            match edge with InterfereEdge(l', r') | MoveEdge(l', r') -> 
-              if l' = x then
-                NodeSet.add r' set 
-              else if r' = x then
-                NodeSet.add l' set
-              else
-                set)
-            g
-            NodeSet.empty
-      in
       (* Brigg's Conservative Coalescing Strategy *)
       let can_coalesce neighbors = 
         let gi = get_info g in
@@ -100,8 +103,8 @@ and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : no
         in
           NodeSet.cardinal big_neighbors < k
       in
-      let left_edges = NodeSet.diff (find_edges l) (singleton r) in
-      let right_edges = NodeSet.diff (find_edges r) (singleton l) in
+      let left_edges = NodeSet.diff (find_neighbors l g) (singleton r) in
+      let right_edges = NodeSet.diff (find_neighbors r g) (singleton l) in
       let combined = NodeSet.union left_edges right_edges in
         if can_coalesce combined then
           Some(((l, r), combined))
@@ -134,20 +137,122 @@ and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : no
     IGraphEdgeSet.empty
   in
     match find_candidate (IGraphEdgeSet.elements g) with
-    | Some(((l, r), c)) -> simplify (update_graph (l, r) c) k ((S_Normal(coalesce_nodes l r))::stack)
+    | Some(((l, r), c)) -> 
+      simplify 
+        (update_graph (l, r) c) 
+        k 
+        ((S_Normal(coalesce_nodes l r))::stack)
     | None -> freeze g k stack
 
 and freeze g k stack =
+  let have_frozen = ref false in
+  let graph_info = get_info g in
+  let g' = 
+    IGraphEdgeSet.fold
+      (fun edge a ->
+        IGraphEdgeSet.add
+          (match edge with
+          | MoveEdge(l, r) when 
+              not !have_frozen 
+              && NodeMap.find l graph_info < k 
+              && NodeMap.find r graph_info < k ->
+            have_frozen := true;
+            InterfereEdge(l, r)
+          | _ -> edge)
+          a)
+      g
+      IGraphEdgeSet.empty
+  in
+    if !have_frozen then
+      simplify g' k stack
+    else
+      spill g k stack
+
+and spill g k stack =
+  let graph_info = get_info g in
+  let (candidate, _) = 
+    NodeMap.fold
+      (fun node degree (candidate, candidate_degree) ->
+        if degree > candidate_degree then
+          (Some(node), degree)
+        else
+          (candidate, candidate_degree))
+      graph_info
+      (None, 0)
+  in
+    match candidate with
+    | Some(node) -> simplify (remove_node node g) k (S_Spillable(node)::stack)
+    | None       -> raise Impossible
+
+
+type colorMap = int NodeMap.t
+
+module ColorSet = 
+  Set.Make(struct let compare = Pervasives.compare type t = int end)
+type colorSet = ColorSet.t
+
+let all_colors k = 
+  let rec range i j = if i >= j then [] else i :: (range (i+1) j) in
+    List.fold_right
+      ColorSet.add
+      (range 0 k)
+      ColorSet.empty
+
+type selectionResult =
+  | Success of colorMap
+  | Fail of operand
+
+
+let rec select (g : interfere_graph) (stack : nodeStackMember list) (k : int) (a : colorMap) =
+  match stack with
+  | head::stack' -> (
+    match head with S_Normal(node) | S_Spillable(node) ->
+      let neighbors = find_neighbors node g in
+      let unavailable_colors = 
+        NodeSet.fold
+          (fun node color_set ->
+            if NodeMap.mem node a then
+              ColorSet.add (NodeMap.find node a) color_set
+            else
+              color_set)
+          neighbors
+          ColorSet.empty
+      in
+      let available_colors = ColorSet.diff (all_colors k) unavailable_colors in
+        if not (ColorSet.is_empty available_colors) then
+          let color = ColorSet.choose available_colors in
+          let a' = NodeMap.add node color a in
+            select g stack' k a'
+        else (
+          match head with
+          | S_Spillable(Normal(operand)) -> Fail(operand)
+          | _ -> raise Impossible
+        )
+    )
+  | [] -> Success(a)
+
+
+let assign_registers (f : func) (map : colorMap) =
   raise Implement_Me
+
+let perform_spill (f : func) (spill : operand) =
+  raise Implement_Me
+
 
 (* Registers used for every function call:
  * Frame Pointer: $31
  * Return Address: $30
  * Callee Saved: $16 - $23 *)
-let reg_alloc (f : func) : func = 
-  raise Implement_Me
+let rec reg_alloc (f : func) : func = 
+  let cfg = build_cfg f in
+  let graph = build_interfere_graph cfg in
+  let stack = simplify graph 9 [] in
+    match select graph stack 9 NodeMap.empty with
+    | Success(map) -> assign_registers f map
+    | Fail(spill)  -> reg_alloc (perform_spill f spill)
+
 
 (* Finally, translate the ouptut of reg_alloc to Mips instructions *)
-let cfg_to_mips (f : func ) : Mips.inst list = 
+let cfg_to_mips (f : func) : Mips.inst list = 
   raise Implement_Me
 
