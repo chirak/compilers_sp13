@@ -110,11 +110,31 @@ and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : no
     | _::t -> find_candidate t
     | [] -> None
   in
-  let update_graph (l, r) c g =
-    raise Implement_Me
+  let update_graph (l, r) c =
+    IGraphEdgeSet.fold (
+      fun x a ->
+        let t = 
+          match x with
+          | InterfereEdge _ -> E_Interfere
+          | MoveEdge _  -> E_Move
+        in
+        match x with InterfereEdge(o, p) | MoveEdge(o, p) ->
+          let g_add b = graph_add b t a in
+            if o = l then
+              g_add (l, p)
+            else if o = r then
+              g_add (r, p)
+            else if p = l then
+              g_add (o, l)
+            else if p = r then
+              g_add (o, r)
+            else
+              IGraphEdgeSet.add x a)
+    g
+    IGraphEdgeSet.empty
   in
     match find_candidate (IGraphEdgeSet.elements g) with
-    | Some(((l, r), c)) -> simplify (update_graph (l, r) c g) k ((S_Normal(coalesce_nodes l r))::stack)
+    | Some(((l, r), c)) -> simplify (update_graph (l, r) c) k ((S_Normal(coalesce_nodes l r))::stack)
     | None -> freeze g k stack
 
 and freeze g k stack =
