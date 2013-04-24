@@ -106,7 +106,7 @@ and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : no
       let left_edges = NodeSet.diff (find_neighbors l g) (singleton r) in
       let right_edges = NodeSet.diff (find_neighbors r g) (singleton l) in
       let combined = NodeSet.union left_edges right_edges in
-        if can_coalesce combined then
+        if not (IGraphEdgeSet.mem (InterfereEdge(l, r)) g) && can_coalesce combined then
           Some(((l, r), combined))
         else
           find_candidate t
@@ -142,7 +142,22 @@ and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : no
         (update_graph (l, r) c) 
         k 
         ((S_Normal(coalesce_nodes l r))::stack)
-    | None -> freeze g k stack
+    | None -> resolve_constraints g k stack
+
+and resolve_constraints g k stack =
+  let g' = 
+    IGraphEdgeSet.filter
+      (function
+        | MoveEdge(l, r) 
+          when IGraphEdgeSet.mem (InterfereEdge(l, r)) g -> 
+            false
+        | _ -> true)
+      g
+  in
+    if IGraphEdgeSet.equal g g' then
+      freeze g k stack
+    else
+      simplify g' k stack
 
 and freeze g k stack =
   let have_frozen = ref false in
