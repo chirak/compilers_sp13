@@ -156,7 +156,8 @@ let runTests () =
      *    j := b
      *    Return
      *)
-    case [main_block] main_out;
+    (* case [main_block] main_out; *)
+    case [block_5a; block_5b; block_5c] IGraphEdgeSet.empty;
 
     if !success then
       print_string "All Tests Passed.\n";

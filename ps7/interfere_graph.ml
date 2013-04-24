@@ -124,7 +124,11 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
         List.fold_right
           (fun inst g ->
             match inst with
-            | { i = _; igen_set = _; ikill_set = _; move = Some((l, r)); } -> graph_add (Normal(l), Normal(r)) E_Move g
+            | { i = _; igen_set = _; ikill_set = _; move = Some((l, r)); } ->
+                if is_var_or_reg l && is_var_or_reg r then
+                  graph_add (Normal(l), Normal(r)) E_Move g
+                else
+                  g
             | _ -> g)
           block.gen_kill_sets.insts)
       cfg

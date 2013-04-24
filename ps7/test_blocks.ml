@@ -2,6 +2,9 @@ open Cfg
 open Cfg_ast
 open Interfere_graph
 
+let r1 = Reg Mips.R1
+let r2 = Reg Mips.R2
+let r3 = Reg Mips.R3
 let a = Var "a"
 let b = Var "b"
 let c = Var "c"
@@ -153,6 +156,33 @@ let igraph_4 : interfere_graph =
         h,j;
         j,k;
       ]
+
+let block_5a : block =
+  [
+    Label "f";
+    Move(c, r3);
+    Move(a, r1);
+    Move(b, r2);
+    Move(e, a);
+    Move(d, Int 0);
+    Arith(d, d, Plus, b);
+    Jump "loop"
+  ]
+let block_5b : block =
+  [
+    Label "loop";
+    Arith(e, e, Minus, Int 1);
+    If(e, Lt, Int 0, "loop", "end");
+  ]
+
+let block_5c : block =
+  [
+    Label "end";
+    Move(r1, d);
+    Move(r3, c);
+    Return;
+  ]
+
 
 (* ------------------------------------------ *)
 

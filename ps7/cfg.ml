@@ -27,6 +27,11 @@ let set_vars (ops : operand list) : OperandSet.t =
                       | Var _ | Reg _ -> OperandSet.add o s 
                       | _ -> s) empty_set ops
 
+let is_var_or_reg(op : operand) : bool =
+  match op with
+      Var _ | Reg _ -> true
+    | _ -> false
+
 let vs2string (set : OperandSet.t) =
   let vars = OperandSet.fold (fun s1 s2 -> (op2string s1)^" "^s2) set "" in
     Printf.sprintf "%s" vars

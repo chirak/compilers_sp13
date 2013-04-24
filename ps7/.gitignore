@@ -9,6 +9,7 @@
 *.cmx
 *.cmxs
 *.cmxa
+*.swp
 
 ###Custom###
 
