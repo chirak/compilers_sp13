@@ -1,9 +1,18 @@
 open Cfg_ast
 open Cfg
 
+type operandNode =
+  | Normal of operand
+  | Coalesced of OperandSet.t
+
+module OperandNode = struct
+  let compare = Pervasives.compare
+  type t = operandNode
+end
+
 type iGraphEdge = 
-  | MoveEdge of (operand * operand)
-  | InterfereEdge of (operand * operand)
+  | MoveEdge of (operandNode * operandNode)
+  | InterfereEdge of (operandNode * operandNode)
 
 type iGraphEdgeType = E_Move | E_Interfere
 
@@ -12,8 +21,26 @@ module IGraphEdgeSet =
 
 type interfere_graph = IGraphEdgeSet.t
 
+let nodes_equal n m = 
+  let collapse = function Normal(o) -> single o | Coalesced(ol) -> ol in
+    OperandSet.equal (collapse n) (collapse m)
+
+let coalesce_nodes n = function
+  | Normal(o) -> (
+    match n with
+    | Normal(p) -> Coalesced(OperandSet.add p (single o))
+    | Coalesced(ol) -> Coalesced(OperandSet.add o ol)
+  )
+
+  | Coalesced(ol) -> (
+    match n with
+    | Normal(o) -> Coalesced(OperandSet.add o ol)
+    | Coalesced(ol') -> Coalesced(OperandSet.union ol ol')
+  )
+
+
 let graph_add (l, r) edge_type g =
-  if l = r then
+  if nodes_equal l r then
     g
   else (
     let c = Pervasives.compare l r in
@@ -26,9 +53,13 @@ let graph_add (l, r) edge_type g =
       IGraphEdgeSet.add edge g
   )
 
+let rec opNode2str = function
+  | Normal(o) -> op2string o
+  | Coalesced(ol) -> String.concat "" (List.map op2string (OperandSet.elements ol))
+
 let igedge2str = function
-  | MoveEdge(o1, o2)      -> Printf.sprintf "%s <==> %s\n" (op2string o1) (op2string o2)
-  | InterfereEdge(o1, o2) -> Printf.sprintf "%s <--> %s\n" (op2string o1) (op2string o2)
+  | MoveEdge(o1, o2)      -> Printf.sprintf "%s <==> %s\n" (opNode2str o1) (opNode2str o2)
+  | InterfereEdge(o1, o2) -> Printf.sprintf "%s <--> %s\n" (opNode2str o1) (opNode2str o2)
 
 let igraph2string (i : interfere_graph) =
   String.concat "" 
@@ -45,33 +76,33 @@ let print_graph (i : interfere_graph) =
  * are live-in and live-out for each program point. *)
 let build_interfere_graph (cfg : cfg) : interfere_graph =
   
-  let connect_set (set : VarSet.t) =
-    VarSet.fold
+  let connect_set (set : OperandSet.t) =
+    OperandSet.fold
       (fun var ->
-        let other_nodes = VarSet.diff set (single var) in
-        VarSet.fold
-          (fun var' -> graph_add (var, var') E_Interfere)
+        let other_nodes = OperandSet.diff set (single var) in
+        OperandSet.fold
+          (fun var' -> graph_add (Normal(var), Normal(var')) E_Interfere)
           other_nodes)
       set
   in
 
-  let rec fold_insts (live_set : VarSet.t) (g : interfere_graph) = function
+  let rec fold_insts (live_set : OperandSet.t) (g : interfere_graph) = function
     | { i = _; igen_set = gen; ikill_set = kill; move = _; }::tl ->
-        let live' = VarSet.diff live_set kill in
+        let live' = OperandSet.diff live_set kill in
         (* Add edges from live_set nodes to gen set nodes *)
         let g' =
-          VarSet.fold
+          OperandSet.fold
             (fun var -> 
-              VarSet.fold
+              OperandSet.fold
                 (fun var' -> 
-                  graph_add (var, var') E_Interfere)
+                  graph_add (Normal(var), Normal(var')) E_Interfere)
                 gen)
             live'
             g
         in
         let g'' = connect_set gen g' in
         (* Add gen set to live set *)
-        let live'' = VarSet.union gen live' in
+        let live'' = OperandSet.union gen live' in
           (* Recur *)
           fold_insts live'' g'' tl
     | [] -> g
@@ -89,7 +120,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
         List.fold_right
           (fun inst g ->
             match inst with
-            | { i = _; igen_set = _; ikill_set = _; move = Some(move); } -> graph_add move E_Move g
+            | { i = _; igen_set = _; ikill_set = _; move = Some((l, r)); } -> graph_add (Normal(l), Normal(r)) E_Move g
             | _ -> g)
           block.gen_kill_sets.insts)
       cfg

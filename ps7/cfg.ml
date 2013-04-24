@@ -14,21 +14,21 @@ let error (s : string) =
  * Used for creating gen/kill sets for single instructions and blocks.
  * Also used in liveliness analysis.
  *)
-module VarSet =
+module OperandSet =
   Set.Make(struct let compare = Pervasives.compare type t = operand end)
-let empty_set = VarSet.empty;;
-let single (o : operand) = VarSet.add o empty_set;;
-let vs_add_all (ops : operand list) : VarSet.t =
-  List.fold_left (fun set op -> VarSet.add op set) empty_set ops
+let empty_set = OperandSet.empty;;
+let single (o : operand) = OperandSet.add o empty_set;;
+let vs_add_all (ops : operand list) : OperandSet.t =
+  List.fold_left (fun set op -> OperandSet.add op set) empty_set ops
 
-(* Builds a VarSet from a list of operands. Only Vars and Regs are added *)
-let set_vars (ops : operand list) : VarSet.t =
+(* Builds a OperandSet from a list of operands. Only Vars and Regs are added *)
+let set_vars (ops : operand list) : OperandSet.t =
   List.fold_left (fun s o -> match o with
-                      | Var _ | Reg _ -> VarSet.add o s 
+                      | Var _ | Reg _ -> OperandSet.add o s 
                       | _ -> s) empty_set ops
 
-let vs2string (set : VarSet.t) =
-  let vars = VarSet.fold (fun s1 s2 -> (op2string s1)^" "^s2) set "" in
+let vs2string (set : OperandSet.t) =
+  let vars = OperandSet.fold (fun s1 s2 -> (op2string s1)^" "^s2) set "" in
     Printf.sprintf "%s" vars
 
 (* General purpose string set *)
@@ -43,8 +43,8 @@ let ss2string (set : StringSet.t) =
 type inst_set = 
   { 
     i : inst;
-    igen_set : VarSet.t;
-    ikill_set : VarSet.t;
+    igen_set : OperandSet.t;
+    ikill_set : OperandSet.t;
     move : (operand * operand) option;
   }
 
@@ -80,8 +80,8 @@ let rec generate_inst_set (i : inst) : inst_set =
 type block_set = 
   {
     insts : inst_set list;
-    bgen_set : VarSet.t;
-    bkill_set: VarSet.t; 
+    bgen_set : OperandSet.t;
+    bkill_set: OperandSet.t; 
   }
 
 let blockset2string (b : block_set) (label : string) : string =
@@ -91,7 +91,7 @@ let blockset2string (b : block_set) (label : string) : string =
 
 (* Produces gen and kill sets for a single block *)
 let gen_block_set (b : block) : block_set =
-  let rec gen (inst_sets : inst_set list) : VarSet.t =
+  let rec gen (inst_sets : inst_set list) : OperandSet.t =
     match inst_sets with
       | [] -> error "Block does not contain instructions"
       | e::[] ->
@@ -100,11 +100,11 @@ let gen_block_set (b : block) : block_set =
              | If(o1,_,o2,_,_) -> set_vars [o1;o2]
              | _ -> error "Last inst in block must be Return, Jump, or If")
       | hd::tl ->
-          (VarSet.union (hd.igen_set) (VarSet.diff (gen tl) hd.ikill_set))
+          (OperandSet.union (hd.igen_set) (OperandSet.diff (gen tl) hd.ikill_set))
   in
 
-  let rec kill (inst_sets : inst_set list) : VarSet.t =
-    List.fold_left (fun a is -> VarSet.union is.ikill_set a) empty_set inst_sets  
+  let rec kill (inst_sets : inst_set list) : OperandSet.t =
+    List.fold_left (fun a is -> OperandSet.union is.ikill_set a) empty_set inst_sets  
   in
 
   let inst_sets = List.map generate_inst_set b in
@@ -118,8 +118,8 @@ type block_node =
   {
     block_label : label;
     mutable gen_kill_sets : block_set;
-    mutable live_in  : VarSet.t;
-    mutable live_out : VarSet.t;
+    mutable live_in  : OperandSet.t;
+    mutable live_out : OperandSet.t;
     mutable succ : StringSet.t; (* Set of block labels *)
   }
 
@@ -127,8 +127,8 @@ let new_block_node (l : label) : block_node =
   { 
     block_label = l;
     gen_kill_sets = { insts = []; bgen_set = empty_set; bkill_set = empty_set };
-    live_in  = VarSet.empty;
-    live_out = VarSet.empty;
+    live_in  = OperandSet.empty;
+    live_out = OperandSet.empty;
     succ     = StringSet.empty;
   }
 
@@ -195,13 +195,13 @@ let build_cfg (f : func) : cfg =
   let build (block : block_node) =
     let out = StringSet.fold 
                 (fun b a -> 
-                   VarSet.union (StringMap.find b base_cfg).live_in a) 
+                   OperandSet.union (StringMap.find b base_cfg).live_in a) 
                 block.succ empty_set
     in
-      if not (VarSet.equal out block.live_out) then
+      if not (OperandSet.equal out block.live_out) then
         (block.live_out <- out; 
-         block.live_in  <- (VarSet.union (block.gen_kill_sets.bgen_set)
-                             (VarSet.diff out (block.gen_kill_sets.bkill_set)));
+         block.live_in  <- (OperandSet.union (block.gen_kill_sets.bgen_set)
+                             (OperandSet.diff out (block.gen_kill_sets.bkill_set)));
          changed := true;)
   in
     (* Loop until no changes occur in CFG *)

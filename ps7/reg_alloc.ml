@@ -14,25 +14,25 @@ open Interfere_graph
  names.)
  *)
 
-module OperandMap =
-  Map.Make(struct let compare = Pervasives.compare type t = operand end)
+module NodeMap = Map.Make(OperandNode)
+type graph_info = int NodeMap.t
 
-type graph_info = int OperandMap.t
+module NodeSet = Set.Make(OperandNode)
+let singleton x = NodeSet.add x NodeSet.empty
 
-type operandStackMember =
-  | Normal of operand
-  | Spillable of operand
-  | Coalesced of operand * operand
+type nodeStackMember =
+  | S_Normal of operandNode
+  | S_Spillable of operandNode
 
 let get_info (g : interfere_graph) =
   let add2info x info =
     let amt = 
-      if OperandMap.mem x info then
-        ((OperandMap.find x info) + 1)
+      if NodeMap.mem x info then
+        ((NodeMap.find x info) + 1)
       else
         1
     in
-      OperandMap.add x amt info
+      NodeMap.add x amt info
   in
     IGraphEdgeSet.fold
       (fun x a -> 
@@ -41,28 +41,28 @@ let get_info (g : interfere_graph) =
           add2info r (add2info l a)
         | _ -> a)
       g
-      OperandMap.empty
+      NodeMap.empty
 
 let remove_move_edges (gi : graph_info) (g : interfere_graph) =
     IGraphEdgeSet.fold
       (fun x a ->
         match x with
         | MoveEdge(l, r) ->
-          OperandMap.remove l (OperandMap.remove r a)
+          NodeMap.remove l (NodeMap.remove r a)
         | _ -> a)
       g
       gi
 
 
-let find_low_degree (gi : graph_info) (k : int) : operand option =
-  OperandMap.fold
+let find_low_degree (gi : graph_info) (k : int) : operandNode option =
+  NodeMap.fold
     (fun operand degree -> function
       | Some(_) as s -> s
       | None -> if degree < k then Some(operand) else None)
     gi
     None
 
-let rec simplify (g : interfere_graph) (k : int) (stack : operandStackMember list) : operandStackMember list =
+let rec simplify (g : interfere_graph) (k : int) (stack : nodeStackMember list) : nodeStackMember list =
   let info = remove_move_edges (get_info g) g in
     match find_low_degree info k with
     | None -> coalesce g k stack
@@ -74,9 +74,9 @@ let rec simplify (g : interfere_graph) (k : int) (stack : operandStackMember lis
               | MoveEdge(l, r)      -> raise Impossible)
             g)
           k 
-          ((Normal(operand))::stack)
+          ((S_Normal(operand))::stack)
 
-and coalesce (g : interfere_graph) (k : int) (stack : operandStackMember list) : operandStackMember list =
+and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : nodeStackMember list =
   let rec find_candidate = function
     | MoveEdge(l, r)::t ->
       let find_edges x =
@@ -84,26 +84,26 @@ and coalesce (g : interfere_graph) (k : int) (stack : operandStackMember list) :
           (fun edge set -> 
             match edge with InterfereEdge(l', r') | MoveEdge(l', r') -> 
               if l' = x then
-                VarSet.add r' set 
+                NodeSet.add r' set 
               else if r' = x then
-                VarSet.add l' set
+                NodeSet.add l' set
               else
                 set)
             g
-            VarSet.empty
+            NodeSet.empty
       in
       (* Brigg's Conservative Coalescing Strategy *)
-      let can_coalesce neighbors graph k = 
-        let gi = get_info graph in
+      let can_coalesce neighbors = 
+        let gi = get_info g in
         let big_neighbors = 
-          VarSet.filter (fun o -> OperandMap.find o gi >= k) neighbors
+          NodeSet.filter (fun o -> NodeMap.find o gi >= k) neighbors
         in
-          VarSet.cardinal big_neighbors < k
+          NodeSet.cardinal big_neighbors < k
       in
-      let left_edges = VarSet.diff (find_edges l) (single r) in
-      let right_edges = VarSet.diff (find_edges r) (single l) in
-      let combined = VarSet.union left_edges right_edges in
-        if can_coalesce combined g k then
+      let left_edges = NodeSet.diff (find_edges l) (singleton r) in
+      let right_edges = NodeSet.diff (find_edges r) (singleton l) in
+      let combined = NodeSet.union left_edges right_edges in
+        if can_coalesce combined then
           Some(((l, r), combined))
         else
           find_candidate t
@@ -114,7 +114,7 @@ and coalesce (g : interfere_graph) (k : int) (stack : operandStackMember list) :
     raise Implement_Me
   in
     match find_candidate (IGraphEdgeSet.elements g) with
-    | Some(((l, r), c)) -> simplify (update_graph (l, r) c g) k ((Coalesced(l, r))::stack)
+    | Some(((l, r), c)) -> simplify (update_graph (l, r) c g) k ((S_Normal(coalesce_nodes l r))::stack)
     | None -> freeze g k stack
 
 and freeze g k stack =

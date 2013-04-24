@@ -69,8 +69,10 @@ let block_2c : block =
     Return;
   ]
 
-let igraph_2 : interfere_graph =
-  List.fold_right (fun x -> graph_add x E_Interfere) [(c, a); (c, b)] IGraphEdgeSet.empty
+let zip_edges =
+  List.fold_left (fun a (x, y) -> graph_add (Normal(x), Normal(y)) E_Interfere a) IGraphEdgeSet.empty
+
+let igraph_2 : interfere_graph = zip_edges [(c, a); (c, b)]
 
 (* ------------------------------------------ *)
 
@@ -102,8 +104,7 @@ let block_3c : block =
   ]
 
 let igraph_3 : interfere_graph =
-  List.fold_right
-      (fun x -> graph_add x E_Interfere)
+  zip_edges
       [
         a, b;
         a, d;
@@ -111,7 +112,6 @@ let igraph_3 : interfere_graph =
         b, d;
         c, d;
       ]
-      IGraphEdgeSet.empty
 
 (* ------------------------------------------ *)
 
@@ -141,8 +141,7 @@ let block_4c : block =
   ]
 
 let igraph_4 : interfere_graph =
-  List.fold_right
-      (fun x -> graph_add x E_Interfere)
+  zip_edges
       [
         f,g;
         f,h;
@@ -154,7 +153,6 @@ let igraph_4 : interfere_graph =
         h,j;
         j,k;
       ]
-      IGraphEdgeSet.empty
 
 (* ------------------------------------------ *)
 
@@ -173,8 +171,7 @@ let main_block : block =
   Return::[]
 
 let main_out : interfere_graph =
-  List.fold_right
-      (fun x -> graph_add x E_Interfere)
+  zip_edges
       [
         b, e;
         b, m;
@@ -191,5 +188,4 @@ let main_out : interfere_graph =
         m, e;
         m, f;
       ]
-      IGraphEdgeSet.empty
 
