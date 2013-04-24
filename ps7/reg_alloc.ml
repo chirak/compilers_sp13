@@ -185,25 +185,20 @@ and spill g k stack =
     | None       -> raise Impossible
 
 
-type colorMap = int NodeMap.t
+module OperandMap = 
+  Map.Make(struct let compare = Pervasives.compare type t = operand end)
+type colorMap = Mips.reg OperandMap.t
 
 module ColorSet = 
-  Set.Make(struct let compare = Pervasives.compare type t = int end)
+  Set.Make(struct let compare = Pervasives.compare type t = Mips.reg end)
 type colorSet = ColorSet.t
-
-let all_colors k = 
-  let rec range i j = if i >= j then [] else i :: (range (i+1) j) in
-    List.fold_right
-      ColorSet.add
-      (range 0 k)
-      ColorSet.empty
 
 type selectionResult =
   | Success of colorMap
   | Fail of operand
 
 
-let rec select (g : interfere_graph) (stack : nodeStackMember list) (k : int) (a : colorMap) =
+let rec select (g : interfere_graph) (stack : nodeStackMember list) (all_colors : colorSet) (a : colorMap) =
   match stack with
   | head::stack' -> (
     match head with S_Normal(node) | S_Spillable(node) ->
@@ -211,18 +206,27 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (k : int) (a
       let unavailable_colors = 
         NodeSet.fold
           (fun node color_set ->
-            if NodeMap.mem node a then
-              ColorSet.add (NodeMap.find node a) color_set
-            else
-              color_set)
+            let operands = node_operands node in
+              OperandSet.fold
+                (fun op color_set' ->
+                  if OperandMap.mem op a then 
+                    ColorSet.add (OperandMap.find op a) color_set'
+                  else
+                    color_set')
+                operands
+                color_set)
           neighbors
           ColorSet.empty
       in
-      let available_colors = ColorSet.diff (all_colors k) unavailable_colors in
+      let available_colors = ColorSet.diff all_colors unavailable_colors in
         if not (ColorSet.is_empty available_colors) then
           let color = ColorSet.choose available_colors in
-          let a' = NodeMap.add node color a in
-            select g stack' k a'
+          let a' = 
+            match node with
+            | Normal(o)    -> OperandMap.add o color a 
+            | Coalesced(s) -> OperandSet.fold (fun x a' -> OperandMap.add x color a') s a
+          in
+            select g stack' all_colors a'
         else (
           match head with
           | S_Spillable(Normal(operand)) -> Fail(operand)
@@ -232,8 +236,26 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (k : int) (a
   | [] -> Success(a)
 
 
-let assign_registers (f : func) (map : colorMap) =
-  raise Implement_Me
+let assign_registers (f : func) (map : colorMap) : func = 
+  let lookup x = Reg(OperandMap.find x map) in
+  let assign_inst_registers = function
+    | Move(l, r)            -> Move(lookup l, lookup r)
+    | Arith(l, o1, ao, o2)  -> Arith(lookup l, lookup o1, ao, lookup o2)
+    | Load(l, r, i)         -> Load(lookup l, lookup r, i)
+    | Store(l, i, r)        -> Store(lookup l, i, lookup r)
+    | Call(o)               -> Call(lookup o)
+    | If(o1, c, o2, l1, l2) -> If(lookup o1, c, lookup o2, l1, l2)
+    | x -> x
+  in
+  let rec assign_block_registers = function
+    | inst::block -> (assign_inst_registers inst)::(assign_block_registers block)
+    | []          -> []
+  in
+  let rec assign_func_registers = function
+    | block::f' -> (assign_block_registers block)::(assign_func_registers f')
+    | []        -> []
+  in
+    assign_func_registers f
 
 let perform_spill (f : func) (spill : operand) =
   raise Implement_Me
@@ -246,8 +268,10 @@ let perform_spill (f : func) (spill : operand) =
 let rec reg_alloc (f : func) : func = 
   let cfg = build_cfg f in
   let graph = build_interfere_graph cfg in
-  let stack = simplify graph 9 [] in
-    match select graph stack 9 NodeMap.empty with
+  let all_colors = raise Implement_Me in
+  let stack = simplify graph (ColorSet.cardinal all_colors) [] in
+  let pre_colored = OperandMap.empty in
+    match select graph stack all_colors pre_colored with
     | Success(map) -> assign_registers f map
     | Fail(spill)  -> reg_alloc (perform_spill f spill)
 
