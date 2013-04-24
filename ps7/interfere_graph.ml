@@ -5,6 +5,10 @@ type operandNode =
   | Normal of operand
   | Coalesced of OperandSet.t
 
+let node_operands = function
+  | Normal(o) -> single o
+  | Coalesced(s) -> s
+
 module OperandNode = struct
   let compare = Pervasives.compare
   type t = operandNode

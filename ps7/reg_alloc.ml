@@ -257,8 +257,40 @@ let assign_registers (f : func) (map : colorMap) : func =
   in
     assign_func_registers f
 
-let perform_spill (f : func) (spill : operand) =
+let perform_spill (f : func) (spill : operand) : func =
   raise Implement_Me
+  (* let spilled = ref false in
+  let offset = ref 0 in
+  let rec spill_inst a x =
+    match x with
+    | Move(l, r) when l = spill ->
+        if not !spilled then (
+          spilled := true;
+        )
+        (Store(fp, !offset-4, spill))::x::a
+    
+    | Arith(l, r1, o, r2) when l = spill ->
+        if not !spilled then (
+          spilled := true;
+        )
+        (Store(fp, !offset-4, spill))::x::a
+
+    | Load(l, r, i) ->
+    
+    | Store(l, i, r) when l = fp ->
+        offset := i+4;
+        (Store(l, !offset, r))::x::a
+
+    | _ -> x::a
+  in
+  let rec spill_block a = function
+    | inst::b' -> spill_block (spill_inst a inst) b'
+    | []       -> List.reverse a
+  in
+  let rec spill_func = function
+    | block::f' -> (spill_block [] block)::(spill_func f')
+    | []        -> []
+  in *)
 
 
 (* Registers used for every function call:
@@ -268,9 +300,32 @@ let perform_spill (f : func) (spill : operand) =
 let rec reg_alloc (f : func) : func = 
   let cfg = build_cfg f in
   let graph = build_interfere_graph cfg in
-  let all_colors = raise Implement_Me in
+  let all_colors = 
+    List.fold_right
+      ColorSet.add
+      [
+        Mips.R8;  Mips.R9;  Mips.R10;
+        Mips.R11; Mips.R12; Mips.R13;
+        Mips.R14; Mips.R15; Mips.R16;
+        Mips.R17; Mips.R18; Mips.R19;
+        Mips.R20; Mips.R21; Mips.R22;
+        Mips.R23;
+      ]
+      ColorSet.empty
+  in
   let stack = simplify graph (ColorSet.cardinal all_colors) [] in
-  let pre_colored = OperandMap.empty in
+  let pre_colored = 
+    IGraphEdgeSet.fold
+      (fun edge color_map ->
+        match edge with InterfereEdge(l, r) | MoveEdge(l, r) ->
+          let update m = function
+            | Normal(Reg(r)) -> OperandMap.add (Reg(r)) r m
+            | _ -> m
+          in
+            update (update color_map l) r)
+      graph
+      OperandMap.empty
+  in
     match select graph stack all_colors pre_colored with
     | Success(map) -> assign_registers f map
     | Fail(spill)  -> reg_alloc (perform_spill f spill)
@@ -278,5 +333,96 @@ let rec reg_alloc (f : func) : func =
 
 (* Finally, translate the ouptut of reg_alloc to Mips instructions *)
 let cfg_to_mips (f : func) : Mips.inst list = 
-  raise Implement_Me
+  let op2mipsop = function
+    | Int(i) -> Mips.Immed(Word32.fromInt i)
+    | Reg(r) -> Mips.Reg(r)
+    | _      -> raise Impossible
+  in
+  let instr2mips (a : Mips.inst list) = function
+    | Label(l) -> Mips.Label(l)::a
+    | Move(Reg(l), r) -> Mips.Or(l, Mips.R0, (op2mipsop r))::a
+    | Arith(Reg(l), r1, ao, r2) -> (
+        match ao with
+        | Plus ->
+            let a' = Mips.Or(l, Mips.R0, op2mipsop r1)::a in
+              Mips.Add(l, l, op2mipsop r1)::a'
+        | Minus ->
+            let a' = Mips.Or(l, Mips.R0, op2mipsop r1)::a in (
+              match r2 with
+              | Int(i) -> Mips.Add(l, l, Mips.Immed(Word32.fromInt (-i)))
+              | Reg(r) -> Mips.Sub(l, l, r)
+              | _ -> raise Impossible
+            )::a'
+        | Times ->
+            let a' = Mips.Or(l, Mips.R0, op2mipsop r1)::a in (
+              match r2 with
+              | Int(i) -> 
+                  let a'' = Mips.Or(Mips.R25, Mips.R0, Mips.Immed(Word32.fromInt i))::a' in
+                    Mips.Mul(l, l, Mips.R25)::a''
+              | Reg(r) -> Mips.Mul(l, l, r)::a'
+              | _ -> raise Impossible
+            )
+        | Div ->
+            let a' = Mips.Or(l, Mips.R0, op2mipsop r1)::a in (
+              match r2 with
+              | Int(i) -> 
+                  let a'' = Mips.Or(Mips.R25, Mips.R0, Mips.Immed(Word32.fromInt i))::a' in
+                    Mips.Div(l, l, Mips.R25)::a''
+              | Reg(r) -> Mips.Div(l, l, r)::a'
+              | _ -> raise Impossible
+            )
+      )
+    | Load(Reg(l), Reg(r), i) -> Mips.Lw(l, r, Word32.fromInt i)::a
+    | Store(Reg(l), i, Reg(r)) -> Mips.Sw(r, l, Word32.fromInt i)::a
+    | Call(Lab(l)) -> Mips.Jal(l)::a
+    | Jump(l) -> Mips.J(l)::a
+    | If(o1, c, o2, l1, l2) -> (
+        match c with
+        | Eq  ->
+            let a = Mips.J(l2)::a in
+            let a = Mips.Beq(Mips.R24, Mips.R25, l1)::a in
+            let a = Mips.Or(Mips.R24, Mips.R0, op2mipsop o1)::a in
+              Mips.Or(Mips.R25, Mips.R0, op2mipsop o2)::a
+        | Neq ->
+            let a = Mips.J(l2)::a in
+            let a = Mips.Bne(Mips.R24, Mips.R25, l1)::a in
+            let a = Mips.Or(Mips.R24, Mips.R0, op2mipsop o1)::a in
+              Mips.Or(Mips.R25, Mips.R0, op2mipsop o2)::a
+        | Lt  ->
+            let a = Mips.J(l2)::a in
+            let a = Mips.Blt(Mips.R24, Mips.R25, l1)::a in
+            let a = Mips.Or(Mips.R24, Mips.R0, op2mipsop o1)::a in
+              Mips.Or(Mips.R25, Mips.R0, op2mipsop o2)::a
+        | Lte ->
+            let a = Mips.J(l2)::a in
+            let a = Mips.Ble(Mips.R24, Mips.R25, l1)::a in
+            let a = Mips.Or(Mips.R24, Mips.R0, op2mipsop o1)::a in
+              Mips.Or(Mips.R25, Mips.R0, op2mipsop o2)::a
+        | Gt  ->
+            let a = Mips.J(l2)::a in
+            let a = Mips.Bgt(Mips.R24, Mips.R25, l1)::a in
+            let a = Mips.Or(Mips.R24, Mips.R0, op2mipsop o1)::a in
+              Mips.Or(Mips.R25, Mips.R0, op2mipsop o2)::a
+        | Gte ->
+            let a = Mips.J(l2)::a in
+            let a = Mips.Bge(Mips.R24, Mips.R25, l1)::a in
+            let a = Mips.Or(Mips.R24, Mips.R0, op2mipsop o1)::a in
+              Mips.Or(Mips.R25, Mips.R0, op2mipsop o2)::a
+      )
+    | Return -> Mips.Jr(Mips.R31)::a
+    | _ -> raise Impossible
+  in
+  let rec block2mips (a : Mips.inst list) = function
+    | inst::b' -> block2mips (instr2mips a inst) b'
+    | [] -> a
+  in
+  let rec func2mips (a : Mips.inst list) = function
+    | block::f' -> func2mips (block2mips a block) f'
+    | []        -> List.rev a
+  in
+    List.filter 
+      (function
+        | Mips.Or(l, Mips.R0, Mips.Reg(r)) when l = r -> false
+        | _ -> true)
+      (func2mips [] f)
 

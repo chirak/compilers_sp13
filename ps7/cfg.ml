@@ -66,12 +66,23 @@ Call f                  {f}        {x}
 let rec generate_inst_set (i : inst) : inst_set =
   let (gen_set, kill_set, move) = 
     match i with
-      | Move(dest,src)          -> (set_vars [src], set_vars[dest], Some((dest, src)))
+      | Move(dest,src)          -> (set_vars [src], set_vars [dest], Some((dest, src)))
       | Arith (dest, o1, _, o2) -> (set_vars [o1;o2], set_vars [dest], None)
       | Load(dest,src,_)        -> (set_vars [src], set_vars [dest], None)
       | Store(dest,_,src)       -> (set_vars [src], empty_set, None)
-      | Call f                  -> (set_vars [f], empty_set, None)
-      | _                       -> (empty_set, empty_set, None)
+      | Call f -> 
+          (
+            set_vars [
+              f;
+              Reg(Mips.R8);  Reg(Mips.R9);
+              Reg(Mips.R10); Reg(Mips.R11);
+              Reg(Mips.R12); Reg(Mips.R13);
+              Reg(Mips.R14); Reg(Mips.R15);
+            ], 
+            empty_set, 
+            None
+          )
+      | _ -> (empty_set, empty_set, None)
   in
     { i = i; igen_set = gen_set; ikill_set = kill_set; move = move }
 
@@ -186,7 +197,8 @@ let build_cfg (f : func) : cfg =
       (fun a b -> 
          let block_node = build_block_node b in 
            StringMap.add block_node.block_label block_node a)
-      empty_cfg f
+      empty_cfg 
+      f
   in
 
   (* Flag for keeping track of whether any changes have been made to the CFG
