@@ -93,6 +93,7 @@ let find_neighbors (x : operandNode) (g : interfere_graph) : NodeSet.t =
       NodeSet.empty
 
 let rec simplify (g : interfere_graph) (k : int) (stack : nodeStackMember list) : nodeStackMember list =
+  print_string "Simplifying...";
   if NodeSet.is_empty g.nodes then 
     stack
   else
@@ -100,12 +101,14 @@ let rec simplify (g : interfere_graph) (k : int) (stack : nodeStackMember list) 
       match find_low_degree info k with
       | None -> coalesce g k stack
       | Some(node) -> 
+          print_string ("Removing node: " ^ (opNode2str node));
           simplify 
             { nodes=NodeSet.remove node g.nodes; edges=(remove_node node g.edges); }
             k 
             ((S_Normal(node))::stack)
 
 and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : nodeStackMember list =
+  print_string "Coallescing...";
   let rec find_candidate = function
     | MoveEdge(l, r)::t ->
         (* Brigg's Conservative Coalescing Strategy *)
@@ -154,6 +157,7 @@ and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : no
   in
     match find_candidate (IGraphEdgeSet.elements g.edges) with
     | Some(((l, r), neighbors)) -> 
+        print_string ("Coalescing nodes: " ^ (opNode2str l) ^ " and " ^ (opNode2str r));
         let coalesced = coalesce_nodes l r in
           simplify 
             (update_graph (l, r) coalesced neighbors) 
@@ -162,11 +166,13 @@ and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : no
     | None -> resolve_constraints g k stack
 
 and resolve_constraints g k stack =
+  print_string "Resolving Constraints...";
   let g' = 
     IGraphEdgeSet.filter
       (function
         | MoveEdge(l, r) 
-          when IGraphEdgeSet.mem (InterfereEdge(l, r)) g.edges -> 
+          when IGraphEdgeSet.mem (InterfereEdge(l, r)) g.edges ->
+            print_string ("Resolved contraint between nodes " ^ (opNode2str l) ^ " and " ^ (opNode2str r));
             false
         | _ -> true)
       g.edges
@@ -177,6 +183,7 @@ and resolve_constraints g k stack =
       simplify { nodes=g.nodes; edges=g'; } k stack
 
 and freeze g k stack =
+  print_string "Freezing...";
   let have_frozen = ref false in
   let graph_info = get_info g in
   let g' = 
@@ -188,6 +195,7 @@ and freeze g k stack =
             when not !have_frozen 
               && NodeMap.find l graph_info < k 
               && NodeMap.find r graph_info < k ->
+                print_string ("Freezing move between nodes " ^ (opNode2str l) ^ " and " ^ (opNode2str r));
                 have_frozen := true;
                 InterfereEdge(l, r)
           | _ -> edge)
@@ -201,6 +209,7 @@ and freeze g k stack =
       spill g k stack
 
 and spill g k stack =
+  print_string "Marking Potential Spills...";
   let graph_info = get_info g in
   let (candidate, _) = 
     NodeMap.fold
@@ -214,6 +223,7 @@ and spill g k stack =
   in
     match candidate with
     | Some(node) -> 
+        print_string ("Marking node " ^ (opNode2str node) ^ " as a potential spill candidate.");
         simplify 
           { nodes=NodeSet.remove node g.nodes; edges=remove_node node g.edges; } 
           k 
