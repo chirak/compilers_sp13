@@ -36,7 +36,7 @@ let runTests () =
   let engine f = build_interfere_graph (build_cfg f) in
   let source_serializer f = String.concat "" (List.map block2string f) in
   let expected_serializer = igraph2string in
-  let comparer = IGraphEdgeSet.equal in
+  let comparer = igraph_equal in
   let case = test engine source_serializer expected_serializer comparer in
     (*
      * ---------------------------------------------------------------------- *
@@ -47,7 +47,7 @@ let runTests () =
      *    f := 9 * h
      *    Return;
      *)
-    case [block_0a] IGraphEdgeSet.empty;
+    case [block_0a] empty_igraph;
 
 
     (*

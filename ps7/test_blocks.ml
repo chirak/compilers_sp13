@@ -21,9 +21,11 @@ let m = Var "m"
 let res = Var "result"
 
 let add_interfere_edges =
-  List.fold_left (fun a (x, y) -> graph_add (Normal(x), Normal(y)) E_Interfere a) IGraphEdgeSet.empty
+  List.fold_left (fun a (x, y) -> graph_add (Normal(x), Normal(y)) E_Interfere a) empty_igraph
 let add_move_edges g =
   List.fold_left (fun a (x, y) -> graph_add (Normal(x), Normal(y)) E_Move a) g
+let add_nodes =
+  List.fold_left (fun a n -> NodeSet.add n a) NodeSet.empty
 
 let block_0a : block =
   [
@@ -51,7 +53,7 @@ let block_1b : block =
     Return;
   ]
 
-let igraph_1 = add_move_edges IGraphEdgeSet.empty [(k, h)]
+let igraph_1 = add_move_edges empty_igraph [(k, h)]
 
 (* ------------------------------------------ *)
 
@@ -77,7 +79,8 @@ let block_2c : block =
     Return;
   ]
 
-let igraph_2 : interfere_graph = add_interfere_edges [(c, a); (c, b)]
+let igraph_2 = add_interfere_edges [(c, a); (c, b)]
+
 
 (* ------------------------------------------ *)
 
@@ -108,7 +111,7 @@ let block_3c : block =
     Return;
   ]
 
-let igraph_3 : interfere_graph =
+let igraph_3 =
   add_interfere_edges
       [
         a, b;
@@ -168,9 +171,8 @@ let move_edges_4 =
     k,j;
     m,f
   ]
-let igraph_4 : interfere_graph =
+let igraph_4 =
   add_move_edges (add_interfere_edges interfere_edges_4) move_edges_4
-
 
 (* ------------------------------------------ *)
 
@@ -239,6 +241,6 @@ let main_interfere_edges =
 
 let main_move_edges = [c,d; b,j]
 
-let main_out : interfere_graph =
+let main_out =
   add_move_edges (add_interfere_edges main_interfere_edges) main_move_edges
 

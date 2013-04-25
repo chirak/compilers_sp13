@@ -46,6 +46,9 @@ type interfere_graph = {
   nodes : NodeSet.t;
   edges : IGraphEdgeSet.t;
 }
+let empty_igraph = { nodes = NodeSet.empty; edges = IGraphEdgeSet.empty}
+let igraph_equal g1 g2 : bool =
+  NodeSet.equal g1.nodes g2.nodes && IGraphEdgeSet.equal g1.edges g2.edges
 
 let igraph2string (i : interfere_graph) =
   String.concat 
@@ -86,18 +89,21 @@ let coalesce_nodes n = function
 (* Adds an edge to the given interference graph. If the edge already exists,
  * we return the given graph*)
 let graph_add (l, r) edge_type g =
-  if nodes_equal l r then
-    g
-  else (
-    let c = Pervasives.compare l r in
-    let e = if c < 0 then (l, r) else (r, l) in
-    let edge = 
-      match edge_type with
-      | E_Move      -> MoveEdge e
-      | E_Interfere -> InterfereEdge e
-    in
-      IGraphEdgeSet.add edge g
-  )
+  let edges =
+    if nodes_equal l r then
+      g.edges
+    else (
+      let c = Pervasives.compare l r in
+      let e = if c < 0 then (l, r) else (r, l) in
+      let edge = 
+        match edge_type with
+        | E_Move      -> MoveEdge e
+        | E_Interfere -> InterfereEdge e
+      in
+        IGraphEdgeSet.add edge g.edges)
+  in
+  let nodes = NodeSet.add r (NodeSet.add l g.nodes) in
+    { nodes = nodes; edges = edges}
 
 (* given a function (i.e., list of basic blocks), constructs the
  * interference graph for that function. *)
@@ -152,7 +158,7 @@ let build_interfere_graph (cfg : cfg) : interfere_graph =
       find_interferences live_set g' (List.rev b.gen_kill_sets.insts)
   in
   (* Create an interference graph without move edges *)
-  let no_moves = StringMap.fold (fun _ -> inter_build_block) cfg IGraphEdgeSet.empty in
+  let no_moves = StringMap.fold (fun _ -> inter_build_block) cfg empty_igraph in
 
     (* Iterate through all of the cfg instructions and find move edges to put
      * into final interference graph. *)
