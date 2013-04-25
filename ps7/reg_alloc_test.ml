@@ -74,7 +74,7 @@ let runTests () =
   in
 
   (* Test graphInfo creation from a given interference graph *)
-  let engine f = get_info f in
+  (* let engine f = get_info f in
   let source_serializer f = igraph2string f in
   let expected_serializer = graphInfo2string in
   let comparer = NodeMap.equal (=) in
@@ -86,7 +86,7 @@ let runTests () =
     case igraph_3     graph_info_3;
     case igraph_4     graph_info_4;
     case main_out     main_graph_info;
-
+ *)
   (* Test move node removal from graph info *)
   let engine f = f in
   let source_serializer f = graphInfo2string f in

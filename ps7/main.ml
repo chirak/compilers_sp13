@@ -1,5 +1,8 @@
 open Cfg
 open Interfere_graph
+open Reg_alloc
+open Mips
+
 (* This magic is used to glue the generated lexer and parser together.
  * Expect one command-line argument, a file to parse.
  * You do not need to understand this interaction with the system. *)
@@ -18,9 +21,12 @@ let parse_stdin() =
 let _ =
   let prog = parse_file() in
   let cfg_prog = List.map Cfg_ast.fn2blocks prog in
-  let reg_alloc_prog = List.map Reg_alloc.reg_alloc cfg_prog in
     print_string (Cfg_ast.prog2string cfg_prog);
+    print_string "\n-------------------------------\n\n";
+  let reg_alloc_prog = List.map Reg_alloc.reg_alloc cfg_prog in
     print_string (Cfg_ast.prog2string reg_alloc_prog);
+  let mips_prog = List.map cfg_to_mips reg_alloc_prog in
+    print_string (String.concat "\n\n" (List.map (fun il -> String.concat "\n" (List.map inst2string il)) mips_prog) ^ "\n");
   (* let mips_prog = List.concat (List.map Reg_alloc.cfg_to_mips reg_alloc_prog) in *)
   (* let strs = List.fold_left (fun a x -> a ^ (Mips.inst2string x) ^ "\n") "" mips_prog in *)
   (*   print_string strs; *)

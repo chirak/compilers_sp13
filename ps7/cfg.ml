@@ -71,20 +71,29 @@ let instset2string (i : inst_set) : string =
 let rec generate_inst_set (i : inst) : inst_set =
   let (gen_set, kill_set, move) = 
     match i with
-      | Move(dest,src)          -> (set_vars [src], set_vars [dest], Some((dest, src)))
-      | Arith (dest, o1, _, o2) -> (set_vars [o1;o2], set_vars [dest], None)
-      | Load(dest,src,_)        -> (set_vars [src], set_vars [dest], None)
-      | Store(dest,_,src)       -> (set_vars [src], empty_set, None)
+      | Move(dest,src)      -> (set_vars [src], set_vars [dest], Some((dest, src)))
+      | Arith(dest,o1,_,o2) -> (set_vars [o1;o2], set_vars [dest], None)
+      | Load(dest,src,_)    -> (set_vars [src], set_vars [dest], None)
+      | Store(dest,_,src)   -> (set_vars [src], empty_set, None)
       | Call f -> 
           (
             set_vars [
               f;
+              Reg(Mips.R2);
               Reg(Mips.R8);  Reg(Mips.R9);
               Reg(Mips.R10); Reg(Mips.R11);
               Reg(Mips.R12); Reg(Mips.R13);
               Reg(Mips.R14); Reg(Mips.R15);
+              Reg(Mips.R30); Reg(Mips.R31);
             ], 
-            empty_set, 
+            set_vars [ 
+              (* Reg(Mips.R2);
+              Reg(Mips.R8);  Reg(Mips.R9);
+              Reg(Mips.R10); Reg(Mips.R11);
+              Reg(Mips.R12); Reg(Mips.R13);
+              Reg(Mips.R14); Reg(Mips.R15);
+              Reg(Mips.R30); Reg(Mips.R31); *)
+            ], 
             None
           )
       | _ -> (empty_set, empty_set, None)
