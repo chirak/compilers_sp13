@@ -106,4 +106,13 @@ let runTests () =
       print_string "Reg Alloc Tests Passed.\n";
 ;;
 
-let _ = runTests()
+let integration_test() =
+  (* let func1 = [block_1a; block_1b] in *)
+  let func3 = [block_3a; block_3b; block_3c] in
+  let alloced_func1 = reg_alloc func3 in
+    print_string (fun2string func3);
+    print_string "\n----------------------------\n";
+    print_string (fun2string alloced_func1);
+;;
+
+let _ = integration_test()
