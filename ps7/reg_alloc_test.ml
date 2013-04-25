@@ -109,11 +109,12 @@ let runTests () =
 
 let integration_test() =
   (* let func1 = [block_1a; block_1b] in *)
-  let func3 = [block_3a; block_3b; block_3c] in
-  let alloced_func1 = reg_alloc func3 in
-    print_string (fun2string func3);
+  let func4 = [block_4a; block_4b; block_4c] in
+    print_string (fun2string func4);
     print_string "\n----------------------------\n";
-    print_string (fun2string alloced_func1);
+  let alloced_func4 = reg_alloc func4 in
+    print_string "\n----------------------------\n";
+    print_string (fun2string alloced_func4);
 ;;
 
 let _ = integration_test()
