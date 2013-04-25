@@ -21,16 +21,16 @@ let single (o : operand) = OperandSet.add o empty_set;;
 let vs_add_all (ops : operand list) : OperandSet.t =
   List.fold_left (fun set op -> OperandSet.add op set) empty_set ops
 
-(* Builds a OperandSet from a list of operands. Only Vars and Regs are added *)
-let set_vars (ops : operand list) : OperandSet.t =
-  List.fold_left (fun s o -> match o with
-                      | Var _ | Reg _ -> OperandSet.add o s 
-                      | _ -> s) empty_set ops
-
 let is_var_or_reg(op : operand) : bool =
   match op with
       Var _ | Reg _ -> true
     | _ -> false
+
+(* Builds a OperandSet from a list of operands. Only Vars and Regs are added *)
+let set_vars (ops : operand list) : OperandSet.t =
+  List.fold_left (fun s o ->
+                    if is_var_or_reg o then OperandSet.add o s else s)
+    empty_set ops
 
 let vs2string (set : OperandSet.t) =
   let vars = OperandSet.fold (fun s1 s2 -> (op2string s1)^" "^s2) set "" in
@@ -61,13 +61,13 @@ let instset2string (i : inst_set) : string =
 
 (* Produces a gen set and kill set for a single instruction *)
 (*
-Statement               Gen        Kill
-x:=y                    {y}        {x}
-x:=p(y,z)               {y,z}      {x}
-x:=*(y+i)               {y}        {x}
-*(v+i):=x               {x}        { }
-Call f                  {f}        {x}
-*)
+ * Statement               Gen        Kill
+ * x:=y                    {y}        {x}
+ * x:=p(y,z)               {y,z}      {x}
+ * x:=*(y+i)               {y}        {x}
+ * *(v+i):=x               {x}        { }
+ * Call f                  {f}        {x}
+ *)
 let rec generate_inst_set (i : inst) : inst_set =
   let (gen_set, kill_set, move) = 
     match i with

@@ -20,6 +20,11 @@ let l = Var "l"
 let m = Var "m"
 let res = Var "result"
 
+let add_interfere_edges =
+  List.fold_left (fun a (x, y) -> graph_add (Normal(x), Normal(y)) E_Interfere a) IGraphEdgeSet.empty
+let add_move_edges g =
+  List.fold_left (fun a (x, y) -> graph_add (Normal(x), Normal(y)) E_Move a) g
+
 let block_0a : block =
   [
     Label "L0";
@@ -46,7 +51,7 @@ let block_1b : block =
     Return;
   ]
 
-let igraph_1 = IGraphEdgeSet.empty
+let igraph_1 = add_move_edges IGraphEdgeSet.empty [(k, h)]
 
 (* ------------------------------------------ *)
 
@@ -72,10 +77,7 @@ let block_2c : block =
     Return;
   ]
 
-let zip_edges =
-  List.fold_left (fun a (x, y) -> graph_add (Normal(x), Normal(y)) E_Interfere a) IGraphEdgeSet.empty
-
-let igraph_2 : interfere_graph = zip_edges [(c, a); (c, b)]
+let igraph_2 : interfere_graph = add_interfere_edges [(c, a); (c, b)]
 
 (* ------------------------------------------ *)
 
@@ -107,7 +109,7 @@ let block_3c : block =
   ]
 
 let igraph_3 : interfere_graph =
-  zip_edges
+  add_interfere_edges
       [
         a, b;
         a, d;
@@ -143,19 +145,35 @@ let block_4c : block =
     Return;
   ]
 
+let interfere_edges_4 =
+  [ 
+    f,g;
+    f,h;
+    f,j;
+    f,k;
+    g,h;
+    g,j;
+    g,k;
+    h,j;
+    j,k; 
+  ]
+
+let move_edges_4 =
+  [ 
+    g,j;
+    g,k;
+    h,k;
+    i,h;
+    j,f;
+    k,j;
+    m,f
+  ]
 let igraph_4 : interfere_graph =
-  zip_edges
-      [
-        f,g;
-        f,h;
-        f,j;
-        f,k;
-        g,h;
-        g,j;
-        g,k;
-        h,j;
-        j,k;
-      ]
+  add_move_edges (add_interfere_edges interfere_edges_4) move_edges_4
+
+
+(* ------------------------------------------ *)
+
 
 let block_5a : block =
   [
@@ -163,14 +181,14 @@ let block_5a : block =
     Move(c, r3);
     Move(a, r1);
     Move(b, r2);
-    Move(e, a);
     Move(d, Int 0);
-    Arith(d, d, Plus, b);
+    Move(e, a);
     Jump "loop"
   ]
 let block_5b : block =
   [
     Label "loop";
+    Arith(d, d, Plus, b);
     Arith(e, e, Minus, Int 1);
     If(e, Lt, Int 0, "loop", "end");
   ]
@@ -186,6 +204,7 @@ let block_5c : block =
 
 (* ------------------------------------------ *)
 
+
 let main_block : block =
   Label "L0"::
   Load(g,j,12)::
@@ -200,22 +219,26 @@ let main_block : block =
   Move(j,b)::
   Return::[]
 
+let main_interfere_edges = 
+  [
+    b, e;
+    b, m;
+    b, c;
+    e, f;
+    e, j;
+    f, j;
+    g, h;
+    g, k;
+    j, g;
+    j, h;
+    j, k;
+    m, c;
+    m, e;
+    m, f;
+  ]
+
+let main_move_edges = [c,d; b,j]
+
 let main_out : interfere_graph =
-  zip_edges
-      [
-        b, e;
-        b, m;
-        b, c;
-        e, f;
-        e, j;
-        f, j;
-        g, h;
-        g, k;
-        j, g;
-        j, h;
-        j, k;
-        m, c;
-        m, e;
-        m, f;
-      ]
+  add_move_edges (add_interfere_edges main_interfere_edges) main_move_edges
 

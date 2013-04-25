@@ -3,8 +3,10 @@ open Cfg
 open Interfere_graph
 
 module NodeMap = Map.Make(OperandNode)
+(* Maps an OperandNode to the degree (# of edges) of the OperandNode *)
 type graphInfo = int NodeMap.t
 
+(* General purpose set for OperandNodes *)
 module NodeSet = Set.Make(OperandNode)
 let singleton x = NodeSet.add x NodeSet.empty
 
@@ -12,13 +14,12 @@ type nodeStackMember =
   | S_Normal of operandNode
   | S_Spillable of operandNode
 
-let get_info (g : interfere_graph) =
+(* Generates a graphInfo from the given interference graph. Only interference
+ * edges are counted, but move related nodes are still included! *)
+let get_info (g : interfere_graph) : graphInfo =
   let add2info x info =
     let amt = 
-      if NodeMap.mem x info then
-        ((NodeMap.find x info) + 1)
-      else
-        1
+      if NodeMap.mem x info then ((NodeMap.find x info) + 1) else 1
     in
       NodeMap.add x amt info
   in
@@ -31,7 +32,9 @@ let get_info (g : interfere_graph) =
       g
       NodeMap.empty
 
-let remove_move_edges (gi : graphInfo) (g : interfere_graph) =
+(* Removes move related nodes from the given graphInfo. Interference graph is
+ * required to determine which nodes are move related *)
+let remove_move_nodes (gi : graphInfo) (g : interfere_graph) : graphInfo =
     IGraphEdgeSet.fold
       (fun x a ->
         match x with
@@ -40,6 +43,7 @@ let remove_move_edges (gi : graphInfo) (g : interfere_graph) =
       g
       gi
 
+(* Finds a node with a degree less than k in the given graphInfo *)
 let find_low_degree (gi : graphInfo) (k : int) : operandNode option =
   NodeMap.fold
     (fun operand degree -> function
@@ -48,15 +52,19 @@ let find_low_degree (gi : graphInfo) (k : int) : operandNode option =
     gi
     None
 
+(* Removes all of the edges with the given node in the given interference graph.
+ *)
 let remove_node (n : operandNode) =
   IGraphEdgeSet.filter 
     (function 
-      | InterfereEdge(l, r) -> not (n = l || n = r) 
-      | MoveEdge(l, r)      -> raise Impossible)
+      | InterfereEdge(l, r) -> not (n = l || n = r)
+      | MoveEdge(l, r)      -> error "Should be no move edges in graphInfo")
 
-let find_neighbors x g =
+(* Returns a set of neighbors of the given node *)
+let find_neighbors (x : operandNode) (g : interfere_graph) : NodeSet.t =
   IGraphEdgeSet.fold 
     (fun edge set -> 
+       (* TODO should we include MoveEdges here?? *)
       match edge with InterfereEdge(l', r') | MoveEdge(l', r') -> 
         if l' = x then
           NodeSet.add r' set 
@@ -71,7 +79,7 @@ let rec simplify (g : interfere_graph) (k : int) (stack : nodeStackMember list) 
   if IGraphEdgeSet.is_empty g then 
     stack
   else
-    let info = remove_move_edges (get_info g) g in
+    let info = remove_move_nodes (get_info g) g in
       match find_low_degree info k with
       | None -> coalesce g k stack
       | Some(operand) -> 
@@ -339,7 +347,8 @@ let cfg_to_mips (f : func) : Mips.inst list =
   let op2mipsop = function
     | Int(i) -> Mips.Immed(Word32.fromInt i)
     | Reg(r) -> Mips.Reg(r)
-    | _      -> raise Impossible
+    | Var _  -> error "Found var in CFG instruction"
+    | _ -> raise Impossible
   in
   let instr2mips (a : Mips.inst list) = function
     | Label(l) -> Mips.Label(l)::a
