@@ -79,12 +79,13 @@ let runTests () =
   let expected_serializer = graphInfo2string in
   let comparer = NodeMap.equal (=) in
   let case = test engine source_serializer expected_serializer comparer in
-    case IGraphEdgeSet.empty NodeMap.empty;
-    case igraph_1 NodeMap.empty;
-    case igraph_2 graph_info_2;
-    case igraph_3 graph_info_3;
-    case igraph_4 graph_info_4;
-    case main_out main_graph_info;
+    
+    case empty_igraph NodeMap.empty;
+    case igraph_1     NodeMap.empty;
+    case igraph_2     graph_info_2;
+    case igraph_3     graph_info_3;
+    case igraph_4     graph_info_4;
+    case main_out     main_graph_info;
 
   (* Test move node removal from graph info *)
   let engine f = f in

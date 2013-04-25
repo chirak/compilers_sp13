@@ -38,7 +38,7 @@ let get_info (g : interfere_graph) : graphInfo =
     (* Find all nodes of zero degree *)
     NodeSet.fold
       (fun x a ->
-        if not (NodeMap.mem x) then
+        if not (NodeMap.mem x a) then
           NodeMap.add x 0 a
         else
           a)
@@ -128,38 +128,30 @@ and coalesce (g : interfere_graph) (k : int) (stack : nodeStackMember list) : no
     | [] -> None
   in
   let update_graph (l, r) coalesced neighbors =
-    {
-      nodes = 
-        NodeSet.add 
-          coalesced 
-          (NodeSet.remove l (NodeSet.remove r g.nodes));
-
-      edges =
-        let (filtered, neighborMap) = 
-          IGraphEdgeSet.fold (
-            fun edge (filtered, neighborMap) ->
-              let t =
-                match edge with
-                | InterfereEdge(l', r') -> E_Interfere
-                | MoveEdge(l', r')      -> E_Move
-              in
-                match edge with InterfereEdge(o, p) | MoveEdge(o, p) ->
-                  if o = l || o = r then
-                    (filtered, NodeSet.add p t)
-                  else if p = l || p = r then
-                    (filtered, NodeSet.add o t)
-                  else
-                    (IGraphEdgeSet.add edge filtered, neighborMap))
-            g.edges
-            (IGraphEdgeSet.empty, NodeMap.empty)
-        in
-          NodeSet.fold (
-            fun neighbor ->
-              let t = NodeMap.find neighbor neighborMap in
-                graph_add (coalesced, neighbor) t)
-            neighbors
-            filtered
-    }
+    let (filtered, neighborMap) = 
+      IGraphEdgeSet.fold (
+        fun edge (filtered, neighborMap) ->
+          let t =
+            match edge with
+            | InterfereEdge(l', r') -> E_Interfere
+            | MoveEdge(l', r')      -> E_Move
+          in
+            match edge with InterfereEdge(o, p) | MoveEdge(o, p) ->
+              if o = l || o = r then
+                (filtered, NodeMap.add p t neighborMap)
+              else if p = l || p = r then
+                (filtered, NodeMap.add o t neighborMap)
+              else
+                (IGraphEdgeSet.add edge filtered, neighborMap))
+        g.edges
+        (IGraphEdgeSet.empty, NodeMap.empty)
+    in
+      NodeSet.fold (
+        fun neighbor ->
+          let t = NodeMap.find neighbor neighborMap in
+            graph_add (coalesced, neighbor) t)
+        neighbors
+        { nodes=g.nodes; edges=filtered; }
   in
     match find_candidate (IGraphEdgeSet.elements g.edges) with
     | Some(((l, r), neighbors)) -> 
@@ -224,7 +216,7 @@ and spill g k stack =
     match candidate with
     | Some(node) -> 
         simplify 
-          { nodes=NodeSet.remove node g.nodes; edges=remove_node node g; } 
+          { nodes=NodeSet.remove node g.nodes; edges=remove_node node g.edges; } 
           k 
           (S_Spillable(node)::stack)
     | None -> raise Impossible
@@ -247,7 +239,7 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (all_colors 
   match stack with
   | head::stack' -> (
     match head with S_Normal(node) | S_Spillable(node) ->
-      let neighbors = find_neighbors node g.edges in
+      let neighbors = find_neighbors node g in
       let unavailable_colors = 
         NodeSet.fold
           (fun node color_set ->
