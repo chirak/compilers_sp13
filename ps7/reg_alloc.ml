@@ -74,9 +74,8 @@ let find_low_degree (gi : graphInfo) (k : int) : operandNode option =
  *)
 let remove_node (n : operandNode) : (IGraphEdgeSet.t -> IGraphEdgeSet.t) =
   IGraphEdgeSet.filter 
-    (function 
-      | InterfereEdge(l, r) -> not (n = l || n = r)
-      | MoveEdge(l, r)      -> error "Should be no move edges in Interference Graph")
+    (function InterfereEdge(l, r) | MoveEdge(l, r) -> not (n = l || n = r))
+            
 
 (* Returns a set of neighbors of the given node *)
 let find_neighbors (x : operandNode) (g : interfere_graph) : NodeSet.t =
@@ -274,7 +273,11 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (all_colors 
 
 
 let assign_registers (f : func) (map : colorMap) : func = 
-  let lookup x = Reg(OperandMap.find x map) in
+  let lookup x =
+    match x with
+    | Var(v) -> Reg(OperandMap.find x map)
+    | _      -> x
+  in
   let assign_inst_registers = function
     | Move(l, r)            -> Move(lookup l, lookup r)
     | Arith(l, o1, ao, o2)  -> Arith(lookup l, lookup o1, ao, lookup o2)
