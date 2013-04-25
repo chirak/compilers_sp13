@@ -6,6 +6,11 @@ module NodeMap = Map.Make(OperandNode)
 (* Maps an OperandNode to the degree (# of edges) of the OperandNode *)
 type graphInfo = int NodeMap.t
 
+let graphInfo2string (gi : graphInfo) : string =
+  NodeMap.fold (fun operand degree str ->
+                  let s = Printf.sprintf "%s -> %d\n" (opNode2str operand) degree in
+                    str^s) gi ""
+
 (* General purpose set for OperandNodes *)
 module NodeSet = Set.Make(OperandNode)
 let singleton x = NodeSet.add x NodeSet.empty
@@ -58,7 +63,7 @@ let remove_node (n : operandNode) =
   IGraphEdgeSet.filter 
     (function 
       | InterfereEdge(l, r) -> not (n = l || n = r)
-      | MoveEdge(l, r)      -> error "Should be no move edges in graphInfo")
+      | MoveEdge(l, r)      -> error "Should be no move edges in Interference Graph")
 
 (* Returns a set of neighbors of the given node *)
 let find_neighbors (x : operandNode) (g : interfere_graph) : NodeSet.t =

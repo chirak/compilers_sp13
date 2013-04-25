@@ -17,11 +17,11 @@ let parse_stdin() =
 
 let _ =
   let prog = parse_file() in
-  (* let cfg_prog = List.map Cfg_ast.fn2blocks prog in *)
-  (* let reg_alloc_prog = List.map Reg_alloc.reg_alloc cfg_prog in *)
-  (* let mips_prog = List.concat (List.map Reg_alloc.cfg_to_mips reg_alloc_prog) in *)
-  (* let strs = List.map (fun x -> (Mips.inst2string x) ^ "\n") mips_prog in *)
-    print_string "HI";
+  let cfg_prog = List.map Cfg_ast.fn2blocks prog in
+  let reg_alloc_prog = List.map Reg_alloc.reg_alloc cfg_prog in
+  let mips_prog = List.concat (List.map Reg_alloc.cfg_to_mips reg_alloc_prog) in
+  let strs = List.fold_left (fun a x -> a ^ (Mips.inst2string x) ^ "\n") "" mips_prog in
+    print_string strs;
 
   (* let cfgs = List.map build_cfg cfg_functions in *)
   (* let igraphs = List.map build_interfere_graph cfgs in *)

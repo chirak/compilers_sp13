@@ -37,7 +37,6 @@ let runTests () =
   let source_serializer f = String.concat "" (List.map block2string f) in
   let expected_serializer = igraph2string in
   let comparer = IGraphEdgeSet.equal in
-
   let case = test engine source_serializer expected_serializer comparer in
     (*
      * ---------------------------------------------------------------------- *
@@ -158,7 +157,7 @@ let runTests () =
     (* case [block_5a; block_5b; block_5c] IGraphEdgeSet.empty; *)
 
     if !success then
-      print_string "All Tests Passed.\n";
+      print_string "Interfere Graph Tests Passed.\n";
 ;;
 
 let _ = runTests ()

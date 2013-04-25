@@ -32,7 +32,8 @@ cfg: mips cish
 test: mips cish
 	$(COMPILER) -c test_blocks.ml
 	$(COMPILER) -c interfere_test.ml
-	$(COMPILER) -o run_test cish_ast.cmo cish_lex.cmo cish_parse.cmo word32.cmo mips.cmo cfg_ast.cmo cfg.cmo interfere_graph.cmo reg_alloc.cmo test_blocks.cmo interfere_test.ml
+	$(COMPILER) -c reg_alloc_test.ml
+	$(COMPILER) -o run_test cish_ast.cmo cish_lex.cmo cish_parse.cmo word32.cmo mips.cmo cfg_ast.cmo cfg.cmo interfere_graph.cmo reg_alloc.cmo test_blocks.cmo interfere_test.ml reg_alloc_test.cmo
 
 clean:
 	-rm *.cmo *.cmi run_test ps7_cfg cish_parse.ml cish_parse.mli cish_lex.ml 
