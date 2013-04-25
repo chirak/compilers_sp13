@@ -8,6 +8,16 @@ type operandNode =
   | Normal of operand
   | Coalesced of OperandSet.t
 
+(* Allows us to create Ocaml sets and maps for type operandNode *)
+module OperandNode = struct
+  let compare = Pervasives.compare
+  type t = operandNode
+end
+
+(* General purpose set for OperandNodes *)
+module NodeSet = Set.Make(OperandNode)
+let singleton x = NodeSet.add x NodeSet.empty
+
 (* Returns the Cfg_ast.operand for a given operandNode *)
 let node_operands = function
   | Normal(o) -> single o
@@ -16,12 +26,6 @@ let node_operands = function
 let rec opNode2str = function
   | Normal(o) -> op2string o
   | Coalesced(ol) -> String.concat "" (List.map op2string (OperandSet.elements ol))
-
-(* Allows us to create Ocaml sets and maps for type operandNode *)
-module OperandNode = struct
-  let compare = Pervasives.compare
-  type t = operandNode
-end
 
 type iGraphEdgeType = E_Move | E_Interfere
 type iGraphEdge = 
@@ -38,13 +42,23 @@ let igedge2str = function
 module IGraphEdgeSet = 
   Set.Make(struct let compare = Pervasives.compare type t = iGraphEdge end)
 
-type interfere_graph = IGraphEdgeSet.t
+type interfere_graph = {
+  nodes : NodeSet.t;
+  edges : IGraphEdgeSet.t;
+}
 
 let igraph2string (i : interfere_graph) =
-  String.concat "" 
+  String.concat 
+    " "
+    (List.map
+      opNode2str
+      (NodeSet.elements i.nodes))
+  ^ "\n" ^
+  String.concat 
+    "" 
     (List.map 
-      (fun edge -> igedge2str edge)
-      (IGraphEdgeSet.elements i))
+      igedge2str
+      (IGraphEdgeSet.elements i.edges))
 
 let print_graph (i : interfere_graph) =
   print_string (igraph2string i)
