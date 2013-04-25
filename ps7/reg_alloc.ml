@@ -275,8 +275,12 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (all_colors 
 let assign_registers (f : func) (map : colorMap) : func = 
   let lookup x =
     match x with
-    | Var(v) -> Reg(OperandMap.find x map)
-    | _      -> x
+    | Var(v) -> 
+        if OperandMap.mem x map then
+          Reg(OperandMap.find x map)
+        else
+          Reg(Mips.R24)
+    | _ -> x
   in
   let assign_inst_registers = function
     | Move(l, r)            -> Move(lookup l, lookup r)
