@@ -23,6 +23,7 @@ module ColorSet =
   Set.Make(struct let compare = Pervasives.compare type t = Mips.reg end)
 type colorSet = ColorSet.t
 
+(* Serializes a graph info structure *)
 let graphInfo2string (gi : graphInfo) : string =
   NodeMap.fold (fun operand degree str ->
                   let s = Printf.sprintf "%s -> %d\n" (opNode2str operand) degree in
@@ -41,6 +42,7 @@ let get_info (g : interfere_graph) (all_colors : colorSet) : graphInfo =
     in
       NodeMap.add x amt info
   in
+  (* Determines if node is pre-colored or not with one of our available colors *)
   let is_valid = function 
     | Normal(Reg(r)) -> ColorSet.mem r all_colors
     | Coalesced(operands) ->
@@ -62,7 +64,7 @@ let get_info (g : interfere_graph) (all_colors : colorSet) : graphInfo =
       g.edges
       NodeMap.empty
   in
-    (* Find all nodes of zero degree *)
+  (* Find all nodes of zero degree *)
     NodeSet.fold
       (fun x a ->
         if not (NodeMap.mem x a) then
@@ -71,6 +73,24 @@ let get_info (g : interfere_graph) (all_colors : colorSet) : graphInfo =
           a)
       g.nodes
       edges_map
+
+(* Determines if a node is pre-colored *)
+let is_precolored = function
+  | Normal(Reg(_)) -> true
+  | Coalesced(o) when OperandSet.exists (function Reg(_) -> true | _ -> false) o -> true
+  | _ -> false
+
+(* Removes all pre-colored bindings from a graph_info structure *)
+let remove_pre_colored gi =
+  NodeMap.fold (
+    fun node degree new_map ->
+      if is_precolored node then
+        new_map
+      else
+        NodeMap.add node degree new_map)
+    gi
+    NodeMap.empty
+
 
 (* Removes move related nodes from the given graphInfo. Interference graph is
  * required to determine which nodes are move related *)
@@ -87,9 +107,13 @@ let remove_move_nodes (gi : graphInfo) (g : interfere_graph) : graphInfo =
 let find_low_degree (gi : graphInfo) (k : int) : operandNode option =
   let result =
     NodeMap.fold
-      (fun operand degree -> function
-        | Some((o, d)) as x -> if degree < d then Some((operand, degree)) else x
-        | None              -> if degree < k then Some((operand, degree)) else None)
+      (fun operand degree a ->
+        if is_precolored operand then
+          a
+        else
+          match a with
+          | Some((o, d)) as x -> if degree < d then Some((operand, degree)) else x
+          | None              -> if degree < k then Some((operand, degree)) else None)
       gi
       None
   in
@@ -102,7 +126,6 @@ let find_low_degree (gi : graphInfo) (k : int) : operandNode option =
 let remove_node (n : operandNode) : (IGraphEdgeSet.t -> IGraphEdgeSet.t) =
   IGraphEdgeSet.filter 
     (function InterfereEdge(l, r) | MoveEdge(l, r) -> not (n = l || n = r))
-            
 
 (* Returns a set of neighbors of the given node *)
 let find_neighbors (x : operandNode) (g : interfere_graph) : NodeSet.t =
@@ -119,33 +142,40 @@ let find_neighbors (x : operandNode) (g : interfere_graph) : NodeSet.t =
       g.edges
       NodeSet.empty
 
+
+(* -----------THE ALGORITHM-------------- *)
+
 let rec simplify (g : interfere_graph) (all_colors : colorSet) (stack : nodeStackMember list) : nodeStackMember list =
-  print_string "Simplifying...\n";
+  (* If there's nothing left in the graph, return the stack *)
   if NodeSet.is_empty g.nodes then 
     stack
   else
     let info = remove_move_nodes (get_info g all_colors) g in
-      print_string (graphInfo2string info);
-      match find_low_degree info (ColorSet.cardinal all_colors) with
-      | None -> coalesce g all_colors stack
-      | Some(node) -> 
-          print_string ("Removing node: " ^ (opNode2str node) ^ "\n");
-          simplify 
-            { nodes=NodeSet.remove node g.nodes; edges=(remove_node node g.edges); }
-            all_colors 
-            ((S_Normal(node))::stack)
+      (* If there are only pre-colored nodes left, we're done *)
+      if List.for_all is_precolored (NodeSet.elements g.nodes) then
+        (List.map (fun x -> S_Normal(x)) (NodeSet.elements g.nodes)) @ stack
+      else
+        (* Try to select a node *)
+        match find_low_degree info (ColorSet.cardinal all_colors) with
+        | None -> coalesce g all_colors stack
+        | Some(node) -> 
+            simplify 
+              { nodes=NodeSet.remove node g.nodes; edges=(remove_node node g.edges); }
+              all_colors 
+              ((S_Normal(node))::stack)
 
 and coalesce (g : interfere_graph) (all_colors : colorSet) (stack : nodeStackMember list) : nodeStackMember list =
-  print_string "Coallescing...\n";
+  let k = ColorSet.cardinal all_colors in
+  (* Finds a potential candidate for coalescing *)
   let rec find_candidate = function
     | MoveEdge(l, r)::t ->
         (* Brigg's Conservative Coalescing Strategy *)
         let can_coalesce neighbors = 
           let gi = get_info g all_colors in
           let big_neighbors = 
-            NodeSet.filter (fun o -> NodeMap.find o gi >= (ColorSet.cardinal all_colors)) neighbors
+            NodeSet.filter (fun o -> is_precolored o || NodeMap.find o gi >= k) neighbors
           in
-            NodeSet.cardinal big_neighbors < (ColorSet.cardinal all_colors)
+            NodeSet.cardinal big_neighbors < k
         in
         let left_edges  = NodeSet.diff (find_neighbors l g) (singleton r) in
         let right_edges = NodeSet.diff (find_neighbors r g) (singleton l) in
@@ -157,6 +187,7 @@ and coalesce (g : interfere_graph) (all_colors : colorSet) (stack : nodeStackMem
     | _::t -> find_candidate t
     | [] -> None
   in
+  (* Restructures graph after a node coalesce *)
   let update_graph (l, r) coalesced neighbors =
     let (filtered, neighborMap) = 
       IGraphEdgeSet.fold (
@@ -192,9 +223,9 @@ and coalesce (g : interfere_graph) (all_colors : colorSet) (stack : nodeStackMem
           edges=filtered; 
         }
   in
+    (* Try to find an edge to coalesce *)
     match find_candidate (IGraphEdgeSet.elements g.edges) with
     | Some(((l, r), neighbors)) -> 
-        print_string ("Coalescing nodes: " ^ (opNode2str l) ^ " and " ^ (opNode2str r) ^ "\n");
         let coalesced = coalesce_nodes l r in
           simplify 
             (update_graph (l, r) coalesced neighbors) 
@@ -203,13 +234,12 @@ and coalesce (g : interfere_graph) (all_colors : colorSet) (stack : nodeStackMem
     | None -> resolve_constraints g all_colors stack
 
 and resolve_constraints g all_colors stack =
-  print_string "Resolving Constraints...\n";
+  (* Try to remove MoveEdges that have an equivalent InterfereEdge *)
   let g' = 
     IGraphEdgeSet.filter
       (function
         | MoveEdge(l, r) 
           when IGraphEdgeSet.mem (InterfereEdge(l, r)) g.edges ->
-            print_string ("Resolved contraint between nodes " ^ (opNode2str l) ^ " and " ^ (opNode2str r) ^ "\n");
             false
         | _ -> true)
       g.edges
@@ -220,18 +250,17 @@ and resolve_constraints g all_colors stack =
       simplify { nodes=g.nodes; edges=g'; } all_colors stack
 
 and freeze g all_colors stack =
-  print_string "Freezing...\n";
   let have_frozen = ref false in
   let graph_info = get_info g all_colors in
   let k = ColorSet.cardinal all_colors in
+  (* Find an edge that can be frozen *)
   let g' = 
     IGraphEdgeSet.fold
       (fun edge a ->
         IGraphEdgeSet.add
           (match edge with
           | MoveEdge(l, r) 
-            when not !have_frozen && (NodeMap.find l graph_info < k || NodeMap.find r graph_info < k) ->
-                print_string ("Freezing move between nodes " ^ (opNode2str l) ^ " and " ^ (opNode2str r) ^ "\n");
+            when not !have_frozen && ((not (is_precolored l) && NodeMap.find l graph_info < k) || (not (is_precolored r) && NodeMap.find r graph_info < k)) ->
                 have_frozen := true;
                 InterfereEdge(l, r)
           | _ -> edge)
@@ -245,12 +274,12 @@ and freeze g all_colors stack =
       spill g all_colors stack
 
 and spill g all_colors stack =
-  print_string "Marking Potential Spills...\n";
   let graph_info = get_info g all_colors in
+  (* Find a spill candidate *)
   let (candidate, _) = 
     NodeMap.fold
       (fun node degree (candidate, candidate_degree) ->
-        if degree > candidate_degree then
+        if not (is_precolored node) && degree > candidate_degree then
           (Some(node), degree)
         else
           (candidate, candidate_degree))
@@ -259,7 +288,6 @@ and spill g all_colors stack =
   in
     match candidate with
     | Some(node) -> 
-        print_string ("Marking node " ^ (opNode2str node) ^ " as a potential spill candidate.\n");
         simplify 
           { nodes=NodeSet.remove node g.nodes; edges=remove_node node g.edges; } 
           all_colors 
@@ -267,6 +295,7 @@ and spill g all_colors stack =
     | None -> raise Impossible
 
 
+(* Output of the selection algorithm *)
 type selectionResult =
   | Success of colorMap
   | Fail of operand
@@ -277,7 +306,9 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (all_colors 
   | head::stack' -> (
       match head with S_Normal(node) | S_Spillable(node) ->
         let operands = node_operands node in
+        (* find all available colors for this stack element *)
         let available_colors =
+          (* Determine if this element has an inherent color *)
           let pre_colored = 
             OperandSet.fold 
               (fun o -> function 
@@ -293,6 +324,7 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (all_colors 
             match pre_colored with
             | Some(color) -> ColorSet.add color ColorSet.empty
             | None -> 
+                (* Determine colors of all neighbors *)
                 let unavailable_colors = 
                   OperandSet.fold (
                     fun operand color_set ->
@@ -316,36 +348,25 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (all_colors 
                     operands
                     ColorSet.empty
                 in
-                  (* print_string ("Unavailable Registers for " ^ (opNode2str node) ^ ": " ^ String.concat ", " (List.map Mips.reg2string (ColorSet.elements unavailable_colors)) ^ "\n"); *)
+                  (* Get all available colors by taking a set difference *)
                   ColorSet.diff all_colors unavailable_colors 
         in
           if not (ColorSet.is_empty available_colors) then
             let color = ColorSet.choose available_colors in
             let a' = 
               match node with
-              | Normal(o)    -> 
-                  print_string ("Assigning operand " ^ (op2string o) ^ " color " ^ (Mips.reg2string color) ^ "\n");
-                  OperandMap.add o color a 
-              | Coalesced(s) -> 
-                  OperandSet.fold 
-                    (fun o a'' -> 
-                      print_string ("Assigning operand " ^ (op2string o) ^ " color " ^ (Mips.reg2string color) ^ "\n");
-                      OperandMap.add o color a'') 
-                    s 
-                    a
+              | Normal(o)    -> OperandMap.add o color a 
+              | Coalesced(s) -> OperandSet.fold (fun o a'' -> OperandMap.add o color a'') s a
             in
               select g stack' all_colors a'
-          else (
+          else
             match head with
             | S_Spillable(Normal(operand)) -> Fail(operand)
-            | S_Normal(n) -> 
-                print_string ("Could not assign " ^ (opNode2str n) ^ " a color.\n");
-                raise Impossible
-          )
+            | _ -> raise Impossible
       )
   | [] -> Success(a)
 
-
+(* Replaces all temps with registers *)
 let assign_registers (f : func) (map : colorMap) : func = 
   let lookup x =
     match x with
@@ -377,80 +398,163 @@ let assign_registers (f : func) (map : colorMap) : func =
   in
     assign_func_registers f
 
-let perform_spill (f : func) (spill : operand) : func =
-  raise Implement_Me
-  (* let spilled = ref false in
-  let offset = ref 0 in
-  let rec spill_inst a x =
+(* Rewrites a func so that the given operand is spilled *)
+let perform_spill (f : func) (spill : operand) (spill_amt : int) : func =
+  (* let loaded = ref false in *)
+  raise Implement_Me;
+  let spill_inst a x =
     match x with
-    | Move(l, r) when l = spill ->
-        if not !spilled then (
-          spilled := true;
-        )
-        (Store(fp, !offset-4, spill))::x::a
-    
-    | Arith(l, r1, o, r2) when l = spill ->
-        if not !spilled then (
-          spilled := true;
-        )
-        (Store(fp, !offset-4, spill))::x::a
+    | Move(l, _) | Arith(l, _, _, _) | Load(l, _, _)
+      when l = spill ->
+        (* loaded := false; *)
+        Store(sp, spill_amt*4, l)::x::a
 
-    | Load(l, r, i) ->
-    
-    | Store(l, i, r) when l = fp ->
-        offset := i+4;
-        (Store(l, !offset, r))::x::a
-
+    | Move(l, r) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            Move(l, new_var)::a
+          else ( 
+          loaded := true;  *)
+            Move(l, new_var)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+          (* ) *)
+    | Arith(l, r, o, r2) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            Arith(l, new_var, o, r2)::a
+          else ( 
+            loaded := true; *)
+            Arith(l, new_var, o, r2)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+          (* ) *)
+    | Arith(l, r1, o, r) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            Arith(l, r1, o, new_var)::a
+          else (
+            loaded := true; *)
+            Arith(l, r1, o, new_var)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+         (*  ) *)
+    | Load(l, r, i) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            Load(l, new_var, i)::a
+          else (
+            loaded := true;
+     *)        Load(l, new_var, i)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+         (*  ) *)
+    | Store(r, i, l) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            Store(new_var, i, l)::a
+          else (
+            loaded := true;
+    *)         Store(new_var, i, l)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+        (*   ) *)
+    | Store(l, i, r) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            Store(l, i, new_var)::a
+          else (
+            loaded := true;
+    *)         Store(l, i, new_var)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+        (*   ) *)
+    | Call(r) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            Call(new_var)::a
+          else (
+            loaded := true;
+           *)  Call(new_var)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+        (*   ) *)
+    | If(r, x, b, c, d) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            If(new_var, x, b, c, d)::a
+          else (
+            loaded := true;
+ *)            If(new_var, x, b, c, d)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+        (*   ) *)
+    | If(x, b, r, c, d) when r = spill ->
+        let new_var = Var("_"^(op2string r)^"_s") in
+          (* if !loaded then
+            If(x, b, new_var, c, d)::a
+          else (
+            loaded := true;
+ *)            If(x, b, new_var, c, d)
+            ::Load(new_var, sp, spill_amt*4)
+            ::a
+        (*   ) *)
     | _ -> x::a
   in
   let rec spill_block a = function
     | inst::b' -> spill_block (spill_inst a inst) b'
-    | []       -> List.reverse a
+    | []       -> List.rev a
   in
   let rec spill_func = function
     | block::f' -> (spill_block [] block)::(spill_func f')
     | []        -> []
-  in *)
-
-
-(* Registers used for every function call:
- * Frame Pointer: $31
- * Return Address: $30
- * Callee Saved: $16 - $23 *)
-let rec reg_alloc (f : func) : func = 
-  let cfg = build_cfg f in
-  let graph = build_interfere_graph cfg in
-  print_graph graph;
-  let all_colors = 
-    List.fold_right
-      ColorSet.add
-      [
-        Mips.R8;  Mips.R9;  Mips.R10;
-        Mips.R11; Mips.R12; Mips.R13;
-        Mips.R14; Mips.R15; Mips.R16;
-        Mips.R17; Mips.R18; Mips.R19;
-        Mips.R20; Mips.R21; Mips.R22;
-        Mips.R23;
-
-        (* Mips.R29;
-        Mips.R30; Mips.R31; Mips.R2; *)
-      ]
-      ColorSet.empty
   in
-  let stack = simplify graph all_colors [] in
-  print_string ("Stack:\n" ^ String.concat "\n" (List.map (function S_Spillable(o) -> "sp("^(opNode2str o)^")" | S_Normal(o) -> (opNode2str o)) stack) ^ "\n\n");
-  let pre_colored = 
-    NodeSet.fold
-      (fun node color_map ->
-        match node with
-          | Normal(Reg(r) as x) -> OperandMap.add x r color_map
-          | _ -> color_map)
-      graph.nodes
-      OperandMap.empty
+    spill_func f
+
+(* Adds the function progolue and epilogue *)
+let make_prologue_and_epilogue (f: func) (spill_amt : int) =
+  f
+
+(* Perfomes a coalescing register allocation for the given func *)
+let reg_alloc (f : func) : func = 
+  let rec alloc f spill_amt =
+    let cfg = build_cfg f in
+    let graph = build_interfere_graph cfg in
+    print_graph graph;
+    let all_colors = 
+      List.fold_right
+        ColorSet.add
+        [
+          Mips.R8;  Mips.R9;  Mips.R10;
+          Mips.R11; Mips.R12; Mips.R13;
+          Mips.R14; Mips.R15; Mips.R16;
+          Mips.R17; Mips.R18; Mips.R19;
+          Mips.R20; Mips.R21; Mips.R22;
+          Mips.R23;
+
+          (* Mips.R29;
+          Mips.R30; Mips.R31; Mips.R2; *)
+        ]
+        ColorSet.empty
+    in
+    let stack = simplify graph all_colors [] in
+    print_string ("Stack:\n" ^ String.concat "\n" (List.map (function S_Spillable(o) -> "sp("^(opNode2str o)^")" | S_Normal(o) -> (opNode2str o)) stack) ^ "\n\n");
+    let pre_colored = 
+      NodeSet.fold
+        (fun node color_map ->
+          match node with
+            | Normal(Reg(r) as x) -> OperandMap.add x r color_map
+            | _ -> color_map)
+        graph.nodes
+        OperandMap.empty
+    in
+      match select graph stack all_colors pre_colored with
+      | Success(map) -> 
+          print_string (colorMap2string map); 
+          make_prologue_and_epilogue (assign_registers f map) spill_amt
+      | Fail(spill)  -> alloc (perform_spill f spill spill_amt) (spill_amt+1)
   in
-    match select graph stack all_colors pre_colored with
-    | Success(map) -> print_string (colorMap2string map); assign_registers f map
-    | Fail(spill)  -> reg_alloc (perform_spill f spill)
+    alloc f 0
 
 
 (* Finally, translate the ouptut of reg_alloc to Mips instructions *)
