@@ -58,7 +58,7 @@ let _ =
   let prog = parse_file() in
   let cfg_prog = List.map Cfg_ast.fn2blocks prog in
   let reg_alloc_prog = List.map Reg_alloc.reg_alloc cfg_prog in
-  let mips_prog = List.concat (List.map cfg_to_mips reg_alloc_prog) in
+  let mips_prog = replace_main (List.concat (List.map cfg_to_mips reg_alloc_prog)) in
 
     (* print out input cish program, cfg program, and reg allocated cfg
      * program if debug flag is enabled*)
