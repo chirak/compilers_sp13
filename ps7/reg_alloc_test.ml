@@ -11,7 +11,6 @@ open Test_blocks
  *  -expected_serialzer: serializer for result. Only used if test fails.
  *  -comparer: comparison function to validate expected and actual result.
  *)
-
 let make_graph_info =
   List.fold_left (fun m (k,v) -> NodeMap.add k v m) NodeMap.empty
 let graph_info_2 =
@@ -104,7 +103,7 @@ let runTests () =
   (* let case = test engine source_serializer expected_serializer comparer in *)
 
     if !success then
-      print_string "Reg Alloc Tests Passed.\n";
+      print_string "Reg Alloc Unit Tests Passed.\n";
 ;;
 
 let integration_test() =
@@ -117,4 +116,5 @@ let integration_test() =
     print_string (fun2string alloced_func4);
 ;;
 
-let _ = integration_test()
+let _ = 
+  runTests();

@@ -334,13 +334,11 @@ let rec select (g : interfere_graph) (stack : nodeStackMember list) (all_colors 
                             let operands' = node_operands node' in
                               OperandSet.fold
                                 (fun op color_set'' ->
-                                  if OperandMap.mem op a then ( 
+                                  if OperandMap.mem op a then
                                     let c = (OperandMap.find op a) in
-                                      (* print_string ("Neighbor " ^ (op2string op) ^ " has color " ^ (Mips.reg2string c) ^ "\n"); *)
                                       ColorSet.add c color_set''
-                                  ) else (
-                                    (* print_string ("Neighbor " ^ (op2string op) ^ " has no color.\n"); *)
-                                    color_set''))
+                                  else
+                                    color_set'')
                                 operands'
                                 color_set')
                           neighbors
@@ -373,10 +371,8 @@ let assign_registers (f : func) (map : colorMap) : func =
     | Var(v) -> 
         if OperandMap.mem x map then
           Reg(OperandMap.find x map)
-        else (
-          print_string ("Could not find color for " ^ (op2string x) ^"\n");
+        else
           Reg(Mips.R24) (* HACK *)
-        )
     | _ -> x
   in
   let assign_inst_registers = function
@@ -401,7 +397,8 @@ let assign_registers (f : func) (map : colorMap) : func =
 (* Rewrites a func so that the given operand is spilled *)
 let perform_spill (f : func) (spill : operand) (spill_amt : int) : func =
   (* let loaded = ref false in *)
-  raise Implement_Me;
+  raise Implement_Me
+  (*
   let spill_inst a x =
     match x with
     | Move(l, _) | Arith(l, _, _, _) | Load(l, _, _)
@@ -509,7 +506,7 @@ let perform_spill (f : func) (spill : operand) (spill_amt : int) : func =
     | block::f' -> (spill_block [] block)::(spill_func f')
     | []        -> []
   in
-    spill_func f
+    spill_func f*)
 
 (* Adds the function progolue and epilogue *)
 let make_prologue_and_epilogue (f: func) (spill_amt : int) =
@@ -520,7 +517,6 @@ let reg_alloc (f : func) : func =
   let rec alloc f spill_amt =
     let cfg = build_cfg f in
     let graph = build_interfere_graph cfg in
-    print_graph graph;
     let all_colors = 
       List.fold_right
         ColorSet.add
@@ -538,7 +534,6 @@ let reg_alloc (f : func) : func =
         ColorSet.empty
     in
     let stack = simplify graph all_colors [] in
-    print_string ("Stack:\n" ^ String.concat "\n" (List.map (function S_Spillable(o) -> "sp("^(opNode2str o)^")" | S_Normal(o) -> (opNode2str o)) stack) ^ "\n\n");
     let pre_colored = 
       NodeSet.fold
         (fun node color_map ->
@@ -550,7 +545,6 @@ let reg_alloc (f : func) : func =
     in
       match select graph stack all_colors pre_colored with
       | Success(map) -> 
-          print_string (colorMap2string map); 
           make_prologue_and_epilogue (assign_registers f map) spill_amt
       | Fail(spill)  -> alloc (perform_spill f spill spill_amt) (spill_amt+1)
   in

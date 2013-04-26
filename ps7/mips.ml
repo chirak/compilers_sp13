@@ -164,4 +164,4 @@ let inst2string(i:inst):string =
   | Sh (r1,r2,w) -> i2as "sh" (r1,r2,w)
   | Sw (r1,r2,w) -> i2as "sw" (r1,r2,w)
   | Label x -> x ^ ":" 
-  | Syscall -> "\tysyscall"
+  | Syscall -> "\tsyscall"

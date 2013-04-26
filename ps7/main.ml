@@ -18,23 +18,57 @@ let parse_file() =
 let parse_stdin() = 
   Cish_parse.program Cish_lex.lexer (Lexing.from_channel stdin)
 
+(* add code to print the result of the program *)
+exception NO_MAIN
+let rec replace_main (code : Mips.inst list) : Mips.inst list =
+  match code with
+    | [] -> raise NO_MAIN
+    | Label "main" :: is ->
+        Label "__main" :: is @
+        [Label "main";
+         (* set up frame to call user's main *)
+         Add (R29, R29, Immed (-256l));
+         Sw (R31, R29, 252l);
+         Sw (R30, R29, 248l);
+         Add (R30, R29, Immed 252l);
+         Jal "__main";
+         (* print result *)
+         Add (R4, R2, Reg R0);
+         Li (R2, 1l);
+         Syscall;
+         (* remove frame *)
+         Lw (R31, R29, 252l);
+         Lw (R30, R29, 248l);
+         Add (R29, R29, Immed 256l);
+         Jr R31]
+    | i :: is -> i :: replace_main is
+
+let mips_header =
+      "\t.text\n"       ^
+      "\t.align\t2\n"   ^
+      "\t.globl main\n"
+
+let mips_footer = 
+      "\n\n"        ^
+      "\t.data\n"   ^
+      "\t.align 0\n"
+
 let _ =
+  let debug = false in 
   let prog = parse_file() in
   let cfg_prog = List.map Cfg_ast.fn2blocks prog in
-    print_string (Cfg_ast.prog2string cfg_prog);
-    print_string "\n-------------------------------\n\n";
   let reg_alloc_prog = List.map Reg_alloc.reg_alloc cfg_prog in
-    print_string (Cfg_ast.prog2string reg_alloc_prog);
-  let mips_prog = List.map cfg_to_mips reg_alloc_prog in
-    print_string (String.concat "\n\n" (List.map (fun il -> String.concat "\n" (List.map inst2string il)) mips_prog) ^ "\n");
-  (* let mips_prog = List.concat (List.map Reg_alloc.cfg_to_mips reg_alloc_prog) in *)
-  (* let strs = List.fold_left (fun a x -> a ^ (Mips.inst2string x) ^ "\n") "" mips_prog in *)
-  (*   print_string strs; *)
+  let mips_prog = List.concat (List.map cfg_to_mips reg_alloc_prog) in
 
-  (* (* let cfgs = List.map build_cfg cfg_functions in *) *)
-  (* (* let igraphs = List.map build_interfere_graph cfgs in *) *)
-  (* (*   print_string (Cfg_ast.prog2string cfg_functions); *) *)
-  (* (*   List.iter print_cfg cfgs; *) *)
-  (* (*   print_string "\n\n---------------------\n\n"; *) *)
-  (* (*   List.iter (fun g -> print_graph g; print_string "\n\n";) igraphs; *) *)
+    (* print out input cish program, cfg program, and reg allocated cfg
+     * program if debug flag is enabled*)
+    if debug then (
+      print_string (Cish_ast.prog2string prog);
+      print_string (Cfg_ast.prog2string reg_alloc_prog);
+      print_string (Cfg_ast.prog2string reg_alloc_prog);
+    );
+    (* Print out final mips program *)
+    print_string mips_header;
+    List.iter println (List.map inst2string mips_prog);
+    print_string mips_footer;
 
