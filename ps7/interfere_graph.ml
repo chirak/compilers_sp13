@@ -38,10 +38,13 @@ let igedge2str = function
   | InterfereEdge(o1, o2) ->
       Printf.sprintf "%s <--> %s\n" (opNode2str o1) (opNode2str o2)
 
-(* The Interference Graph structure: a set of iGraphEdges *)
 module IGraphEdgeSet = 
   Set.Make(struct let compare = Pervasives.compare type t = iGraphEdge end)
 
+(* The Interference Graph structure: 
+ *   -Set of iGraphEdges
+ *   -Set of nodes in graph
+ *)
 type interfere_graph = {
   nodes : NodeSet.t;
   edges : IGraphEdgeSet.t;
