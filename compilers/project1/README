@@ -1,0 +1,8 @@
+Your job for this assignment is to implement a parser and lexer,
+using lex/yacc. Running make in the current directory generates 
+an executables ps2yacc to test the parser.  This executable 
+expects a file-to-parse as an argument.
+
+Usage:
+ps2yacc [file-to-parse]
+
