@@ -1,0 +1,37 @@
+PS8
+-------------------------------------------------------------------------------
+Steve Elliott - steell@ccs.neu.edu
+Chirag Khatri - ckhatri4@gmail.com
+-------------------------------------------------------------------------------
+
+Building PS8
+-------------------------------------------------------------------------------
+Running make in this project will yield two executables:
+    ./run_test - Will execute the tests that are located in reg_alloc_test.ml
+    and interfere_graph_test.ml. There are a sufficient number of test cases
+    for constructing interference graphs which are heavily commented.
+
+    ./run - Will execute the program located in main.ml. You must provide a file
+    with cish code to compile it down to mips. The mips assembly code will print
+    to stdout. To look at the intermediate code generated (cish, cfg, register
+    allocated cfg) set the debug flag to true. NOTE: in our register allocated
+    cfg there will be a lot of redundent moves due to coalescing . We get rid of
+    these redundent moves when we compile to mips
+
+Interference Graph Structure
+-------------------------------------------------------------------------------
+Our inteference graph is primary a set of edges, where each edge can either be
+a move edge or an interference edge. We also keep track of the nodes in graph
+by using a set. Both of these components are held in a record type called
+interfere_graph. This was a fairly simple representation for our graph but we
+were able to create many helper functions to get information such as node
+neighbors, node degree, etc... Also it is important to note that a node in our
+representation can be a normal node or a coalesced. A coalesced is actually a
+set of the combined nodes which we coalesced.
+
+
+Task that weren't finished
+-------------------------------------------------------------------------------
+We were not able to successfully implement spilling. Thus all cish examples with
+function calls will fail to produce any output (function calls always require
+spilling).

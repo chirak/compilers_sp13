@@ -1,0 +1,3 @@
+./ps5_mlish $1 > COMPILED
+./ps5_scish COMPILED
+rm COMPILED
